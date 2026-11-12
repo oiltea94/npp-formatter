@@ -66,6 +66,34 @@ class PE:
                 table += 20
         return result
 
+    def version(self):
+        """Read the numeric FILEVERSION from the VERSIONINFO resource tree."""
+        rva = self.unpack('<I', self.directories + 16)[0]
+        if not rva:
+            raise ValueError('Missing DLL version resource')
+        base = self.offset(rva)
+        directory = base
+        for level in range(3):
+            named, ids = self.unpack('<HH', directory + 12)
+            entries = [self.unpack('<II', directory + 16 + i * 8) for i in range(named + ids)]
+            candidates = [entry for entry in entries if entry[0] == 16] if level == 0 else entries
+            if not candidates:
+                raise ValueError('Missing DLL VERSIONINFO')
+            target = candidates[0][1]
+            if bool(target & 0x80000000) != (level < 2):
+                raise ValueError('Malformed DLL version resource tree')
+            directory = base + (target & 0x7fffffff)
+        data_rva, size = self.unpack('<II', directory)
+        start = self.offset(data_rva)
+        key = 'VS_VERSION_INFO\0'.encode('utf-16le')
+        if self.data[start + 6:start + 6 + len(key)] != key:
+            raise ValueError('Invalid VERSIONINFO key')
+        fixed = (start + 6 + len(key) + 3) & ~3
+        if fixed + 52 > start + size or self.unpack('<I', fixed)[0] != 0xFEEF04BD:
+            raise ValueError('Invalid VS_FIXEDFILEINFO')
+        high, low = self.unpack('<II', fixed + 8)
+        return high >> 16, high & 65535, low >> 16, low & 65535
+
 
 def verify_dll(data, arch):
     pe = PE(data)

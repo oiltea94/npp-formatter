@@ -296,7 +296,26 @@ The ZIP contains the DLL, bridge script, both READMEs, and third-party license n
 
 The smoke test locates Notepad++ through `NPP_EXE`, `PATH`, or the standard installation location and checks its architecture before launch. It runs a separate copy in an automatically cleaned temporary directory and checks formatting, caret mapping, undo, no-op behavior, and stale-result protection. Its result summary omits machine-specific paths. Use 64-bit Python for x64/ARM64 editor tests.
 
-CI builds x86 and x64 on `windows-latest`, and ARM64 on `windows-11-arm`. Each job runs native process tests and the matching portable editor test before uploading a ZIP and checksum. The portable test editor is pinned to Notepad++ 8.9.6 with a SHA-256 check. Workflow configuration alone does not establish a test pass; inspect the run for each architecture. No release is published automatically.
+CI builds x86 and x64 on `windows-latest`, and ARM64 on `windows-11-arm`. Each job runs native process tests and the matching portable editor test before uploading a ZIP and checksum. The portable test editor is pinned to Notepad++ 8.9.6 with a SHA-256 check. An assembly job then verifies all three packages, their DLL versions, and their contents against the source checkout. Workflow configuration alone does not establish a test pass; inspect the run for each architecture.
+
+### GitHub Actions and releases
+
+The workflows follow the build, assembly, release, and catalog stages used by `oiltea94/npp-yaml-properties`:
+
+| Trigger | Result |
+|---|---|
+| Push to `main`, pull request, or manual build | Run tests on all three architectures and upload verified `release-assets` and bilingual `release-notes` artifacts; no Release is published |
+| Push a `vMAJOR.MINOR.PATCH` tag | Require the tag to match `package.json` and `package-lock.json`, with a matching section in `CHANGELOG.md`; publish a Release only after all build, editor, and assembly checks pass |
+| Release publication | Download and verify the public assets, then prepare a Plugins Admin catalog proposal; submission is opt-in |
+| Manual catalog workflow | Recheck a published tag and prepare or submit the catalog PR without rebuilding the release |
+
+`package.json` is the version source for the DLL's Windows version resource and the About dialog. Update the package and lockfile versions and add bilingual release notes to `CHANGELOG.md` before tagging. Publishing uploads the verified artifacts to a draft first, then makes it public; existing releases are not overwritten.
+
+Release attachments include three manual-install ZIPs, three `-plugin-admin.zip` ZIPs, `manifest.json`, `SHA256SUMS`, and one catalog entry JSON per architecture. Manual ZIPs retain the `NppFormatter/` folder. Plugins Admin ZIPs place the DLL and `bridge.cjs` at the archive root, with the same README and license contents. Both layouts exclude Node.js, Prettier, and Java packages. Use the manual ZIP for the installation instructions above.
+
+The **Prepare or submit official plugin catalog PR** workflow defaults to `dry_run: true`, saving the proposed catalog files, PR body, and validation plan as `official-catalog-proposal`. To submit, configure the `NPP_PLUGIN_LIST_TOKEN` Actions secret with push access to `oiltea94/nppPluginList` and permission to create PRs in `notepad-plus-plus/nppPluginList`, then run with `dry_run: false`. Set the repository variable `NPP_CATALOG_AUTO_SUBMIT` to `true` to enable submission after future tag releases. The workflow reuses an existing NppFormatter PR, preserves reviewer notes, and rejects version downgrades or a changed archive hash for the same version. Catalog failures can be retried separately and do not roll back a published release.
+
+Catalog metadata conservatively uses the tested Notepad++ version `8.9.6` as its minimum. Generating or submitting a catalog entry does not mean the plugin is already listed in Plugins Admin; upstream review and list distribution are still required. Actual Plugins Admin install/update/remove behavior remains to be validated.
 
 Code is split between `src/` (native plugin and process management), `bridge/` (Prettier integration), and `tests/`. The prototype runs one Node.js process per request and allows one active request at a time.
 

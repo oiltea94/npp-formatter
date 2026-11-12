@@ -296,7 +296,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architect
 
 冒烟测试通过 `NPP_EXE`、`PATH` 或标准安装位置查找 Notepad++，启动前核对架构，在自动清理的临时目录中运行独立副本，检查格式化、光标映射、撤销、无变化时的行为和过期结果保护。测试结果摘要不记录本机路径。测试 x64/ARM64 编辑器时使用 64 位 Python。
 
-CI 在 `windows-latest` 上构建 x86 和 x64，在 `windows-11-arm` 上构建 ARM64。各任务运行原生进程测试与对应架构的便携编辑器测试，通过后上传 ZIP 和校验文件。测试编辑器固定为 Notepad++ 8.9.6，下载后校验 SHA-256。配置工作流不代表测试已通过，请查看各架构实际运行结果；工作流不会自动发布 Release。
+CI 在 `windows-latest` 上构建 x86 和 x64，在 `windows-11-arm` 上构建 ARM64。各任务运行原生进程测试与对应架构的便携编辑器测试，通过后上传 ZIP 和校验文件。测试编辑器固定为 Notepad++ 8.9.6，下载后校验 SHA-256。随后由汇总任务验证三种安装包、DLL 版本，并将包内内容与源码核对。配置工作流不代表测试已通过，请查看各架构实际运行结果。
+
+### GitHub Actions 与发布
+
+工作流参考 `oiltea94/npp-yaml-properties`，分为构建、汇总、发布和插件目录四个阶段：
+
+| 触发方式 | 执行结果 |
+|---|---|
+| 推送到 `main`、Pull Request 或手动构建 | 测试全部三种架构，上传经过验证的 `release-assets` 和双语 `release-notes` 构件；不发布 Release |
+| 推送 `vMAJOR.MINOR.PATCH` 标签 | 标签须与 `package.json`、`package-lock.json` 一致，且 `CHANGELOG.md` 有对应版本记录；全部构建、编辑器和汇总校验通过后发布 Release |
+| Release 发布后 | 下载并校验公开附件，生成 Plugins Admin 目录提案；实际提交需要启用 |
+| 手动运行目录工作流 | 按已发布的标签重新校验并预览或提交目录 PR，无需重新构建 |
+
+DLL 的 Windows 版本资源和“关于”窗口统一使用 `package.json` 的版本。打标签前，更新包与锁文件版本，并在 `CHANGELOG.md` 补充双语发布说明。发布时先将校验过的附件上传到草稿，再公开发布；已有 Release 不会被覆盖。
+
+Release 附件包括三种架构的手动安装 ZIP、三份 `-plugin-admin.zip`、`manifest.json`、`SHA256SUMS`，以及各架构的目录条目 JSON。手动安装包保留 `NppFormatter/` 文件夹；Plugins Admin 包将 DLL 和 `bridge.cjs` 放在压缩包根目录，README 和许可内容保持一致。两类安装包都不含 Node.js、Prettier 或 Java 扩展依赖。上文安装步骤使用手动安装 ZIP。
+
+**Prepare or submit official plugin catalog PR** 工作流默认 `dry_run: true`，将拟修改的目录文件、PR 正文和校验计划保存为 `official-catalog-proposal` 构件。实际提交时，在 Actions 中配置 `NPP_PLUGIN_LIST_TOKEN` Secret，令牌需能推送 `oiltea94/nppPluginList` 并向 `notepad-plus-plus/nppPluginList` 创建 PR，然后以 `dry_run: false` 运行。将仓库变量 `NPP_CATALOG_AUTO_SUBMIT` 设为 `true`，可在后续标签发布后自动提交。工作流复用已有的 NppFormatter PR、保留人工审阅备注，并拦截版本降级或同版本安装包哈希变化。目录步骤失败后可单独重试，不会撤销已发布的 Release。
+
+目录条目的最低 Notepad++ 版本保守设置为已测试编辑器版本 `8.9.6`。生成条目或提交 PR 不代表已进入 Plugins Admin，仍需上游审阅和目录分发。通过 Plugins Admin 实际安装、更新和卸载的行为尚待验证。
 
 代码分为 `src/`（原生插件与进程管理）、`bridge/`（Prettier 集成）和 `tests/`。原型每次请求启动一个 Node.js 进程，同一时间只执行一个格式化请求。
 

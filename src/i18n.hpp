@@ -1,4 +1,5 @@
 #pragma once
+#include "version.hpp"
 #include <algorithm>
 #include <cctype>
 #include <string>
@@ -60,9 +61,9 @@ inline constexpr Translation translations[] = {
     {L"Could not create the settings file.", L"创建配置文件失败。", L"建立設定檔失敗。"},
     {L"Could not write settings.", L"写入配置失败。", L"寫入設定失敗。"},
     {L"Could not replace settings file.", L"替换配置文件失败。", L"取代設定檔失敗。"},
-    {L"NppFormatter 0.1.0 prototype\n\nRequires user-installed Node.js 18+ and Prettier 3.x.\nConfigure both paths in Settings. UTF-8 buffers, full-document formatting.\n\nBuilt-in formatting languages:\nJavaScript / JSX, TypeScript / TSX, JSON, JSON5, HTML, CSS, SCSS, Less, YAML, Markdown, GraphQL, Vue, Angular HTML.\nJava: requires user-installed prettier-plugin-java.\n\nAdditional saved-file formats: Flow, JSONC, MDX, Handlebars, MJML, PostCSS, JSON.stringify.\n\nAssign shortcuts through Notepad++ Shortcut Mapper.\nNode.js, Prettier and language plugins are not bundled.",
-     L"NppFormatter 0.1.0 原型版本\n\n需要自行安装 Node.js 18+ 和 Prettier 3.x。\n请在配置中选择或自动检测路径。支持 UTF-8 文档的全文格式化。\n\n内置格式化语言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、HTML、CSS、SCSS、Less、YAML、Markdown、GraphQL、Vue、Angular HTML。\nJava：需要自行安装 prettier-plugin-java。\n\n已保存文件另支持：Flow、JSONC、MDX、Handlebars、MJML、PostCSS、JSON.stringify。\n\n可通过 Notepad++ 的快捷键管理设置快捷键。\n插件不捆绑 Node.js、Prettier 或语言扩展包。",
-     L"NppFormatter 0.1.0 原型版本\n\n需要自行安裝 Node.js 18+ 和 Prettier 3.x。\n請在設定中選擇或自動偵測路徑。支援 UTF-8 文件的全文格式化。\n\n內建格式化語言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、HTML、CSS、SCSS、Less、YAML、Markdown、GraphQL、Vue、Angular HTML。\nJava：需要自行安裝 prettier-plugin-java。\n\n已儲存檔案另支援：Flow、JSONC、MDX、Handlebars、MJML、PostCSS、JSON.stringify。\n\n可透過 Notepad++ 的快捷鍵管理設定快捷鍵。\n外掛不附帶 Node.js、Prettier 或語言擴充套件。"},
+    {L"NppFormatter " NPP_FORMATTER_VERSION_W L" prototype\n\nRequires user-installed Node.js 18+ and Prettier 3.x.\nConfigure both paths in Settings. UTF-8 buffers, full-document formatting.\n\nBuilt-in formatting languages:\nJavaScript / JSX, TypeScript / TSX, JSON, JSON5, HTML, CSS, SCSS, Less, YAML, Markdown, GraphQL, Vue, Angular HTML.\nJava: requires user-installed prettier-plugin-java.\n\nAdditional saved-file formats: Flow, JSONC, MDX, Handlebars, MJML, PostCSS, JSON.stringify.\n\nAssign shortcuts through Notepad++ Shortcut Mapper.\nNode.js, Prettier and language plugins are not bundled.",
+     L"NppFormatter " NPP_FORMATTER_VERSION_W L" 原型版本\n\n需要自行安装 Node.js 18+ 和 Prettier 3.x。\n请在配置中选择或自动检测路径。支持 UTF-8 文档的全文格式化。\n\n内置格式化语言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、HTML、CSS、SCSS、Less、YAML、Markdown、GraphQL、Vue、Angular HTML。\nJava：需要自行安装 prettier-plugin-java。\n\n已保存文件另支持：Flow、JSONC、MDX、Handlebars、MJML、PostCSS、JSON.stringify。\n\n可通过 Notepad++ 的快捷键管理设置快捷键。\n插件不捆绑 Node.js、Prettier 或语言扩展包。",
+     L"NppFormatter " NPP_FORMATTER_VERSION_W L" 原型版本\n\n需要自行安裝 Node.js 18+ 和 Prettier 3.x。\n請在設定中選擇或自動偵測路徑。支援 UTF-8 文件的全文格式化。\n\n內建格式化語言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、HTML、CSS、SCSS、Less、YAML、Markdown、GraphQL、Vue、Angular HTML。\nJava：需要自行安裝 prettier-plugin-java。\n\n已儲存檔案另支援：Flow、JSONC、MDX、Handlebars、MJML、PostCSS、JSON.stringify。\n\n可透過 Notepad++ 的快捷鍵管理設定快捷鍵。\n外掛不附帶 Node.js、Prettier 或語言擴充套件。"},
     {L"Project homepage:", L"项目主页：", L"專案首頁："},
     {L"Could not open the project homepage. Copy this address into your browser:\nhttps://github.com/oiltea94/npp-formatter",
      L"打开项目主页失败。请将此地址复制到浏览器：\nhttps://github.com/oiltea94/npp-formatter",

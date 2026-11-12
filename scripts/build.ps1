@@ -30,9 +30,14 @@ try {
         $build = "build/$arch"
         $stage = "dist/$arch/NppFormatter"
         New-Item -ItemType Directory -Force -Path $build,"$stage/licenses" | Out-Null
+        & python 'scripts/release.py' prepare --build-dir $build
+        if ($LASTEXITCODE -ne 0) { throw 'Version resource generation failed.' }
+        $resourceCompiler = Join-Path $Toolchain "bin\$($targets[$arch])-w64-mingw32-windres.exe"
+        & $resourceCompiler "$build/version.rc" -O coff -o "$build/version.o"
+        if ($LASTEXITCODE -ne 0) { throw "$arch version resource compilation failed." }
         $flags = @('-std=c++17', '-O2', '-static', '-DUNICODE', '-D_UNICODE', '-DNOMINMAX',
-                   '-Wall', '-Wextra', '-Isrc', '-Ithird_party/npp', '-Ithird_party/json')
-        & $compiler @flags -shared 'src/plugin.cpp' -o "$build/NppFormatter.dll" -lcomdlg32 -lcomctl32 -lshell32 -luser32 -lgdi32
+                   '-Wall', '-Wextra', '-Isrc', "-I$build", '-Ithird_party/npp', '-Ithird_party/json')
+        & $compiler @flags -shared 'src/plugin.cpp' "$build/version.o" -o "$build/NppFormatter.dll" -lcomdlg32 -lcomctl32 -lshell32 -luser32 -lgdi32
         if ($LASTEXITCODE -ne 0) { throw "$arch plugin build failed." }
         & $compiler @flags -municode 'tests/process_test.cpp' -o "$build/process_test.exe"
         if ($LASTEXITCODE -ne 0) { throw "$arch process test build failed." }
