@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="300" viewBox="0 0 1040 300" role="img" aria-labelledby="title description">
+  <title id="title">NppFormatter — JavaScript formatting with Prettier</title>
+  <desc id="description">Before: function sum(a,b){return a+b;} After: a three-line function with consistent spaces and two-space indentation. This is a code example, not a screenshot.</desc>
+  <rect width="1040" height="300" rx="20" fill="#101820"/>
+  <path d="M35 32h970" stroke="#273842"/>
+  <rect x="32" y="20" width="128" height="24" rx="12" fill="#1c3330"/>
+  <text x="96" y="36" text-anchor="middle" fill="#99e8b0" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="600" letter-spacing="1.1">JAVASCRIPT</text>
+  <rect x="810" y="20" width="198" height="24" rx="12" fill="#101820"/>
+  <text x="1008" y="36" text-anchor="end" fill="#a2b5be" font-family="Segoe UI,Arial,sans-serif" font-size="13">Same code. Consistent style.</text>
+  <rect x="32" y="66" width="456" height="176" rx="12" fill="#17232c" stroke="#33434e"/>
+  <rect x="552" y="66" width="456" height="176" rx="12" fill="#172b2b" stroke="#72d99a"/>
+  <text x="56" y="97" fill="#afbec7" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="600" letter-spacing="1.5">BEFORE</text>
+  <text x="576" y="97" fill="#9af0b8" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="600" letter-spacing="1.5">AFTER</text>
+  <text x="984" y="97" text-anchor="end" fill="#a7cbc1" font-family="Segoe UI,Arial,sans-serif" font-size="12">Prettier defaults</text>
+  <path d="M32 111h456M552 111h456" stroke="#33434e"/>
+  <g font-family="Consolas,DejaVu Sans Mono,monospace" font-size="19" xml:space="preserve">
+    <text x="56" y="151" fill="#e7eff3"><tspan fill="#8dc8f5">function</tspan> sum(a,b){<tspan fill="#8dc8f5">return</tspan> a+b;}</text>
+    <text x="576" y="151" fill="#e7eff3"><tspan fill="#8dc8f5">function</tspan> sum(a, b) {</text>
+    <text x="597" y="181" fill="#e7eff3"><tspan fill="#8dc8f5">return</tspan> a + b;</text>
+    <text x="576" y="211" fill="#e7eff3">}</text>
+  </g>
+  <circle cx="520" cy="154" r="18" fill="#243d36"/>
+  <path d="M512 154h16m-6-6 6 6-6 6" fill="none" stroke="#9af0b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="32" y="274" fill="#d6e6ed" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600">NppFormatter</text>
+  <text x="1008" y="274" text-anchor="end" fill="#a2b5be" font-family="Segoe UI,Arial,sans-serif" font-size="13">Format document &#183; Notepad++ &#183; One-step undo</text>
+</svg>
