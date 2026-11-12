@@ -72,5 +72,5 @@ jobs:
         if: always()
         with:
           name: editor-checks-${{ matrix.arch }}
-          path: build/${{ matrix.arch }}/editor-smoke.json
+          path: build/${{ matrix.arch }}/editor-smoke-*.json
           if-no-files-found: ignore

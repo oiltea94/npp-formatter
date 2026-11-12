@@ -1,0 +1,81 @@
+#pragma once
+#include <algorithm>
+#include <cctype>
+#include <string>
+
+namespace formatter::i18n {
+enum class Language { English, SimplifiedChinese, TraditionalChinese };
+
+inline Language fromNativeFileName(std::string filename) {
+    auto slash = filename.find_last_of("/\\");
+    if (slash != std::string::npos) filename.erase(0, slash + 1);
+    std::transform(filename.begin(), filename.end(), filename.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    if (filename == "chinesesimplified.xml") return Language::SimplifiedChinese;
+    if (filename == "taiwanesemandarin.xml" || filename == "hongkongcantonese.xml")
+        return Language::TraditionalChinese;
+    return Language::English;
+}
+
+enum class Text {
+    Empty, Format, Settings, About, SettingsTitle, AboutTitle, ErrorTitle,
+    NodeLabel, PrettierLabel, ParserLabel, TimeoutLabel, Browse, Detect, Save, Cancel,
+    NodeFilter, PrettierFilter, NodeFirst, DetectNode, DetectPrettier, Detected,
+    DetectionFailed, DetectionTimerError, TimeoutError, NodePathError, PrettierPathError,
+    CreateSettingsError, WriteSettingsError, ReplaceSettingsError, AboutBody,
+    Busy, Formatting, Discarded, Ignored, Unchanged, Formatted, FormatFailed, Count
+};
+
+struct Translation { const wchar_t* english; const wchar_t* simplified; const wchar_t* traditional; };
+inline constexpr Translation translations[] = {
+    {L"", L"", L""},
+    {L"Format document", L"格式化文档", L"格式化文件"},
+    {L"Settings...", L"配置...", L"設定..."},
+    {L"About", L"关于", L"關於"},
+    {L"NppFormatter settings", L"NppFormatter 配置", L"NppFormatter 設定"},
+    {L"About NppFormatter", L"关于 NppFormatter", L"關於 NppFormatter"},
+    {L"NppFormatter error", L"NppFormatter 错误", L"NppFormatter 錯誤"},
+    {L"Node.js executable (node.exe)", L"Node.js 可执行文件（node.exe）", L"Node.js 執行檔（node.exe）"},
+    {L"Prettier 3.x package directory (browse to its package.json)", L"Prettier 3.x 包目录（浏览时选择 package.json）", L"Prettier 3.x 套件目錄（瀏覽時選擇 package.json）"},
+    {L"Untitled-document parser (e.g. json, babel, typescript, html, css, markdown)", L"未保存文档的解析器（如 json、babel、typescript、html、css、markdown）", L"未儲存文件的解析器（如 json、babel、typescript、html、css、markdown）"},
+    {L"Timeout in milliseconds (1000 - 120000)", L"超时时间，毫秒（1000 - 120000）", L"逾時時間，毫秒（1000 - 120000）"},
+    {L"Browse...", L"浏览...", L"瀏覽..."},
+    {L"Auto-detect", L"自动检测", L"自動偵測"},
+    {L"Save", L"保存", L"儲存"},
+    {L"Cancel", L"取消", L"取消"},
+    {L"Node executable\0*.exe\0\0", L"Node 可执行文件\0*.exe\0\0", L"Node 執行檔\0*.exe\0\0"},
+    {L"Prettier package.json\0package.json\0\0", L"Prettier 包文件\0package.json\0\0", L"Prettier 套件檔案\0package.json\0\0"},
+    {L"Detect or browse for Node.js first, then detect Prettier.", L"请先检测或浏览选择 Node.js，再检测 Prettier。", L"請先偵測或瀏覽選擇 Node.js，再偵測 Prettier。"},
+    {L"Detecting Node.js...", L"正在检测 Node.js...", L"正在偵測 Node.js..."},
+    {L"Detecting Prettier...", L"正在检测 Prettier...", L"正在偵測 Prettier..."},
+    {L"Detected. Click Save to keep the paths.", L"检测成功，点击“保存”以保留路径。", L"偵測成功，點擊「儲存」以保留路徑。"},
+    {L"Detection failed. Check the installation or use Browse.", L"检测失败，请检查安装情况或使用“浏览”选择路径。", L"偵測失敗，請檢查安裝情況或使用「瀏覽」選擇路徑。"},
+    {L"Could not start detection timer.", L"启动自动检测失败。", L"啟動自動偵測失敗。"},
+    {L"Timeout must be between 1000 and 120000 milliseconds.", L"超时时间必须为 1000 至 120000 毫秒。", L"逾時時間必須為 1000 至 120000 毫秒。"},
+    {L"Select an existing absolute node.exe path.", L"请选择已存在的 node.exe 文件的绝对路径。", L"請選擇已存在的 node.exe 檔案的絕對路徑。"},
+    {L"Select the Prettier package directory containing package.json.", L"请选择包含 package.json 的 Prettier 包目录。", L"請選擇包含 package.json 的 Prettier 套件目錄。"},
+    {L"Could not create the settings file.", L"创建配置文件失败。", L"建立設定檔失敗。"},
+    {L"Could not write settings.", L"写入配置失败。", L"寫入設定失敗。"},
+    {L"Could not replace settings file.", L"替换配置文件失败。", L"取代設定檔失敗。"},
+    {L"NppFormatter 0.1.0 prototype\n\nRequires user-installed Node.js 18+ and Prettier 3.x.\nConfigure both paths in Settings. UTF-8 buffers, full-document formatting.\nAssign a shortcut through Notepad++ Shortcut Mapper.\n\nNo Node.js runtime or Prettier package is bundled.",
+     L"NppFormatter 0.1.0 原型版本\n\n需要自行安装 Node.js 18+ 和 Prettier 3.x。\n请在配置中选择或自动检测路径。支持 UTF-8 文档的全文格式化。\n可通过 Notepad++ 的快捷键管理设置快捷键。\n\n插件不捆绑 Node.js 运行时或 Prettier 包。",
+     L"NppFormatter 0.1.0 原型版本\n\n需要自行安裝 Node.js 18+ 和 Prettier 3.x。\n請在設定中選擇或自動偵測路徑。支援 UTF-8 文件的全文格式化。\n可透過 Notepad++ 的快捷鍵管理設定快捷鍵。\n\n外掛不附帶 Node.js 執行環境或 Prettier 套件。"},
+    {L"NppFormatter: formatting already in progress", L"NppFormatter：正在格式化，请稍候", L"NppFormatter：正在格式化，請稍候"},
+    {L"NppFormatter: formatting...", L"NppFormatter：正在格式化...", L"NppFormatter：正在格式化..."},
+    {L"NppFormatter: document changed; result discarded", L"NppFormatter：文档已变化，已丢弃结果", L"NppFormatter：文件已變更，已捨棄結果"},
+    {L"NppFormatter: skipped by .prettierignore", L"NppFormatter：已按 .prettierignore 跳过", L"NppFormatter：已依 .prettierignore 略過"},
+    {L"NppFormatter: already formatted", L"NppFormatter：无需格式化", L"NppFormatter：無需格式化"},
+    {L"NppFormatter: formatted (Ctrl+Z to undo)", L"NppFormatter：格式化完成（Ctrl+Z 撤销）", L"NppFormatter：格式化完成（Ctrl+Z 復原）"},
+    {L"NppFormatter: formatting failed", L"NppFormatter：格式化失败", L"NppFormatter：格式化失敗"},
+};
+static_assert(sizeof(translations) / sizeof(translations[0]) == static_cast<size_t>(Text::Count));
+
+inline const wchar_t* get(Text key, Language language) {
+    const auto& value = translations[static_cast<size_t>(key)];
+    switch (language) {
+    case Language::SimplifiedChinese: return value.simplified;
+    case Language::TraditionalChinese: return value.traditional;
+    default: return value.english;
+    }
+}
+} // namespace formatter::i18n

@@ -159,6 +159,21 @@ Join-Path (npm root -g) 'prettier'
 
 ## 使用
 
+### 界面语言
+
+插件跟随 **Notepad++ 的界面语言**，不依赖 Windows 显示语言。支持英文、简体中文和繁体中文；香港中文语言使用繁体中文，其他语言暂时回退为英文。
+
+插件菜单、配置窗口标签与按钮、检测引导、配置校验提示、关于内容和格式化状态提示均提供翻译。在 Notepad++ 首选项中切换语言后，插件菜单和已打开的配置窗口会立即更新，保留未保存的输入和正在进行的检测，无需单独设置插件语言或重启。外部工具的原始诊断保留原文；标准文件选择框和消息框按钮由 Windows 提供。
+
+| 英文 | 简体中文 | 繁体中文 |
+|---|---|---|
+| Format document | 格式化文档 | 格式化文件 |
+| Settings... | 配置... | 設定... |
+| About | 关于 | 關於 |
+| Auto-detect | 自动检测 | 自動偵測 |
+
+### 格式化
+
 选择 **插件 → NppFormatter → Format document**。需要快捷键时，在 **设置 → 管理快捷键（Shortcut Mapper）→ 插件命令（Plugin commands）** 中找到格式化命令并设置。
 
 | 菜单命令 | 作用 |
@@ -243,6 +258,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architect
 CI 在 `windows-latest` 上构建 x86 和 x64，在 `windows-11-arm` 上构建 ARM64。各任务运行原生进程测试与对应架构的便携编辑器测试，通过后上传 ZIP 和校验文件。测试编辑器固定为 Notepad++ 8.9.6，下载后校验 SHA-256。配置工作流不代表测试已通过，请查看各架构实际运行结果；工作流不会自动发布 Release。
 
 代码分为 `src/`（原生插件与进程管理）、`bridge/`（Prettier 集成）和 `tests/`。原型每次请求启动一个 Node.js 进程，同一时间只执行一个格式化请求。
+
+编辑器测试默认覆盖英文、简体中文和繁体中文，可用 `--language en`、`--language zh-CN` 或 `--language zh-TW` 单独运行。便携测试编辑器需包含对应的官方语言 XML；`tests/download_npp.py` 会从校验过哈希的压缩包中提取这些文件。测试还会在配置输入尚未保存时，通过 Notepad++ 首选项切换语言。翻译集中维护于 `src/i18n.hpp`；CI 在每种 CPU 架构上运行全部三种语言的测试。
 
 ## 后续计划与参与
 

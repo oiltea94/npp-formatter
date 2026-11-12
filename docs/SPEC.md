@@ -65,6 +65,14 @@ Implemented slices:
    prefer the saved document's nearest Prettier 3.x package over configured/global
    locations. No installation or project-code execution during discovery. Fill
    fields only; persist on Save, preserve old values on failure, cancel on close.
+5. UI localization: query NPPM_GETNATIVELANGFILENAME after NPPN_READY and on
+   NPPN_NATIVELANGCHANGED. Select English, Simplified Chinese, or Traditional Chinese
+   (including Hong Kong); fall back to English for other host languages. Update
+   menu labels by command ID without changing callbacks, shortcuts, or item state.
+   Relabel open Settings controls without recreating them or changing unsaved input.
+   Keep translation lookups on the UI thread; background detection returns data.
+   Localize Settings validation, guidance, About, and status messages. Preserve
+   external diagnostics and Windows-owned dialog buttons in their original language.
 
 The supported build targets are Notepad++ x86, x64, and ARM64 with UTF-8 Scintilla buffers. Existing non-UTF-8
 buffers receive a clear message asking the user to convert the encoding first.

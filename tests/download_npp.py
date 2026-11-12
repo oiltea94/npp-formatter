@@ -31,7 +31,9 @@ def download(arch):
             raise RuntimeError('Editor checksum mismatch; extraction cancelled.')
         temporary.replace(archive)
     with zipfile.ZipFile(archive) as package:
-        for name in ('notepad++.exe', 'langs.model.xml', 'stylers.model.xml'):
+        for name in ('notepad++.exe', 'langs.model.xml', 'stylers.model.xml',
+                     'localization/english.xml', 'localization/chineseSimplified.xml',
+                     'localization/taiwaneseMandarin.xml'):
             package.extract(name, folder)
     print(f'PASS verified portable Notepad++ 8.9.6 ({arch})')
 

@@ -7,11 +7,14 @@
 #include "json.hpp"
 #include "bridge_process.hpp"
 #include "dependency_discovery.hpp"
+#include "i18n.hpp"
 
 namespace fs = std::filesystem;
 using nlohmann::json;
 using formatter::utf8;
 using formatter::wide;
+using formatter::i18n::Text;
+using formatter::i18n::Language;
 namespace {
 HINSTANCE instance;
 NppData host;
@@ -36,20 +39,25 @@ std::unique_ptr<Completion> completion;
 FuncItem commands[3];
 std::thread detectionWorker;
 std::atomic<bool> detectionCancelled{false}, detectionFinished{false};
-struct DetectionResult { int field; std::wstring path, message; };
+struct DetectionResult { int field; std::wstring path, error; };
 DetectionResult detectionResult;
+Language uiLanguage = Language::English;
+Text lastStatus = Text::Empty, detectionStatus = Text::Empty;
+std::wstring detectionDetails;
+const wchar_t* tr(Text key) { return formatter::i18n::get(key, uiLanguage); }
 
 LRESULT sci(HWND editor, UINT message, WPARAM w = 0, LPARAM l = 0) {
     return SendMessageW(editor, message, w, l);
 }
-void status(const wchar_t* text) {
-    SendMessageW(host._nppHandle, NPPM_SETSTATUSBAR, STATUSBAR_DOC_TYPE, reinterpret_cast<LPARAM>(text));
+void status(Text key) {
+    lastStatus = key;
+    SendMessageW(host._nppHandle, NPPM_SETSTATUSBAR, STATUSBAR_DOC_TYPE, reinterpret_cast<LPARAM>(tr(key)));
 }
 void showError(const std::string& text) {
     std::wstring message;
     try { message = wide(text); }
     catch (...) { message = L"The operation failed; its diagnostic text is not valid UTF-8."; }
-    MessageBoxW(host._nppHandle, message.c_str(), L"NppFormatter", MB_OK | MB_ICONERROR);
+    MessageBoxW(settingsWindow ? settingsWindow : host._nppHandle, message.c_str(), tr(Text::ErrorTitle), MB_OK | MB_ICONERROR);
 }
 std::wstring controlText(HWND window, int id) {
     HWND control = GetDlgItem(window, id);
@@ -75,10 +83,10 @@ void saveSettings(const Settings& next) {
     fs::path temporary = configPath; temporary += L".tmp";
     { std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
       file.write("\xff\xfe", 2);
-      if (!file) throw std::runtime_error("Could not create the settings file."); }
+      if (!file) throw std::runtime_error(utf8(tr(Text::CreateSettingsError))); }
     auto write = [&](const wchar_t* key, const std::wstring& value) {
         if (!WritePrivateProfileStringW(L"Formatter", key, value.c_str(), temporary.c_str()))
-            throw std::runtime_error("Could not write settings.");
+            throw std::runtime_error(utf8(tr(Text::WriteSettingsError)));
     };
     write(L"NodePath", next.node); write(L"PrettierPath", next.prettier);
     write(L"UntitledParser", next.parser); write(L"TimeoutMs", std::to_wstring(next.timeoutMs));
@@ -88,7 +96,7 @@ void saveSettings(const Settings& next) {
         fs::copy_file(configPath, backup, fs::copy_options::overwrite_existing);
     }
     if (!MoveFileExW(temporary.c_str(), configPath.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-        throw std::runtime_error("Could not replace settings file.");
+        throw std::runtime_error(utf8(tr(Text::ReplaceSettingsError)));
     settings = next;
 }
 void addControl(HWND parent, const wchar_t* kind, const wchar_t* text,
@@ -103,12 +111,60 @@ void browse(HWND window, bool node) {
     OPENFILENAMEW dialog{};
     dialog.lStructSize = sizeof(dialog); dialog.hwndOwner = window;
     dialog.lpstrFile = path; dialog.nMaxFile = 32768;
-    dialog.lpstrFilter = node ? L"Node executable\0*.exe\0\0" : L"Prettier package.json\0package.json\0\0";
+    dialog.lpstrFilter = tr(node ? Text::NodeFilter : Text::PrettierFilter);
     dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     if (GetOpenFileNameW(&dialog)) {
         std::wstring selected = node ? std::wstring(path) : fs::path(path).parent_path().wstring();
         SetDlgItemTextW(window, node ? 101 : 102, selected.c_str());
     }
+}
+void setDetectionStatus(HWND window, Text key, const std::wstring& details = {}) {
+    detectionStatus = key;
+    detectionDetails = details;
+    std::wstring message = tr(key);
+    if (!details.empty()) message += L"\r\n" + details;
+    SetDlgItemTextW(window, 105, message.c_str());
+}
+void updateSettingsLanguage(HWND window) {
+    SetWindowTextW(window, tr(Text::SettingsTitle));
+    const std::pair<int, Text> controls[] = {
+        {301, Text::NodeLabel}, {302, Text::PrettierLabel}, {303, Text::ParserLabel}, {304, Text::TimeoutLabel},
+        {201, Text::Browse}, {202, Text::Browse}, {203, Text::Detect}, {204, Text::Detect},
+        {IDOK, Text::Save}, {IDCANCEL, Text::Cancel}
+    };
+    for (auto [id, key] : controls) SetDlgItemTextW(window, id, tr(key));
+    setDetectionStatus(window, detectionStatus, detectionDetails);
+}
+bool updateMenuLabel(HMENU menu, UINT command, const wchar_t* label) {
+    for (int i = 0; i < GetMenuItemCount(menu); ++i) {
+        if (GetMenuItemID(menu, i) == command) {
+            // Keep Shortcut Mapper's displayed key combination and all item state.
+            wchar_t existing[256]{};
+            GetMenuStringW(menu, i, existing, 256, MF_BYPOSITION);
+            std::wstring text(label);
+            if (auto shortcut = wcschr(existing, L'\t')) text += shortcut;
+            MENUITEMINFOW item{}; item.cbSize = sizeof(item); item.fMask = MIIM_STRING;
+            item.dwTypeData = text.data();
+            return SetMenuItemInfoW(menu, i, TRUE, &item) != FALSE;
+        }
+        auto submenu = GetSubMenu(menu, i);
+        if (submenu && updateMenuLabel(submenu, command, label)) return true;
+    }
+    return false;
+}
+void refreshLanguage() {
+    char filename[256]{};
+    SendMessageW(host._nppHandle, NPPM_GETNATIVELANGFILENAME, sizeof(filename), reinterpret_cast<LPARAM>(filename));
+    uiLanguage = formatter::i18n::fromNativeFileName(filename);
+    const Text labels[]{Text::Format, Text::Settings, Text::About};
+    auto menu = reinterpret_cast<HMENU>(SendMessageW(host._nppHandle, NPPM_GETMENUHANDLE, NPPPLUGINMENU, 0));
+    for (int i = 0; i < 3; ++i) {
+        wcscpy_s(commands[i]._itemName, tr(labels[i]));
+        if (menu && commands[i]._cmdID) updateMenuLabel(menu, commands[i]._cmdID, tr(labels[i]));
+    }
+    DrawMenuBar(host._nppHandle);
+    if (settingsWindow) updateSettingsLanguage(settingsWindow);
+    if (lastStatus != Text::Empty) status(lastStatus);
 }
 void detectionControls(HWND window, bool enabled) {
     for (int id : {101, 102, 201, 202, 203, 204, IDOK})
@@ -124,7 +180,7 @@ void startDetection(HWND window, bool node) {
     auto selectedNode = controlText(window, 101);
     auto selectedPrettier = controlText(window, 102);
     if (!node && (selectedNode.empty() || !fs::path(selectedNode).is_absolute() || !fs::is_regular_file(selectedNode))) {
-        SetDlgItemTextW(window, 105, L"Detect or browse for Node.js first, then detect Prettier.");
+        setDetectionStatus(window, Text::NodeFirst);
         return;
     }
     wchar_t filename[32768]{};
@@ -132,7 +188,7 @@ void startDetection(HWND window, bool node) {
     std::wstring filePath = fs::path(filename).is_absolute() ? filename : L"";
     auto bridge = (pluginDirectory / L"bridge.cjs").wstring();
     detectionCancelled = false; detectionFinished = false;
-    if (!SetTimer(window, 2, 50, nullptr)) throw std::runtime_error("Could not start detection timer.");
+    if (!SetTimer(window, 2, 50, nullptr)) throw std::runtime_error(utf8(tr(Text::DetectionTimerError)));
     try {
         detectionWorker = std::thread([node, selectedNode, selectedPrettier, filePath, bridge] {
             DetectionResult result{node ? 101 : 102, {}, {}};
@@ -147,36 +203,36 @@ void startDetection(HWND window, bool node) {
                         throw std::runtime_error(response.value("error", "Prettier detection failed."));
                     result.path = wide(response.at("prettierPath").get<std::string>());
                 }
-                result.message = L"Detected. Click Save to keep the paths.";
             } catch (const std::exception& error) {
-                try { result.message = wide(error.what()); }
-                catch (...) { result.message = L"Detection failed. Use Browse to select the dependency."; }
+                try { result.error = wide(error.what()); }
+                catch (...) { result.error = L"Invalid diagnostic encoding."; }
             }
             detectionResult = std::move(result);
             detectionFinished.store(true, std::memory_order_release);
         });
     } catch (...) { KillTimer(window, 2); throw; }
     detectionControls(window, false);
-    SetDlgItemTextW(window, 105, node ? L"Detecting Node.js..." : L"Detecting Prettier...");
+    setDetectionStatus(window, node ? Text::DetectNode : Text::DetectPrettier);
 }
 LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
     try {
         if (message == WM_CREATE) {
-            addControl(window, L"STATIC", L"Node.js executable (node.exe)", 0, 16, 16, 550, 20, 0);
+            addControl(window, L"STATIC", tr(Text::NodeLabel), 0, 16, 16, 550, 20, 301);
             addControl(window, L"EDIT", settings.node.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 40, 480, 26, 101);
-            addControl(window, L"BUTTON", L"Browse...", WS_TABSTOP, 504, 40, 96, 26, 201);
-            addControl(window, L"BUTTON", L"Auto-detect", WS_TABSTOP, 608, 40, 100, 26, 203);
-            addControl(window, L"STATIC", L"Prettier 3.x package directory (browse to its package.json)", 0, 16, 80, 580, 20, 0);
+            addControl(window, L"BUTTON", tr(Text::Browse), WS_TABSTOP, 504, 40, 96, 26, 201);
+            addControl(window, L"BUTTON", tr(Text::Detect), WS_TABSTOP, 608, 40, 100, 26, 203);
+            addControl(window, L"STATIC", tr(Text::PrettierLabel), 0, 16, 80, 692, 20, 302);
             addControl(window, L"EDIT", settings.prettier.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 104, 480, 26, 102);
-            addControl(window, L"BUTTON", L"Browse...", WS_TABSTOP, 504, 104, 96, 26, 202);
-            addControl(window, L"BUTTON", L"Auto-detect", WS_TABSTOP, 608, 104, 100, 26, 204);
-            addControl(window, L"STATIC", L"Untitled-document parser (e.g. json, babel, typescript, html, css, markdown)", 0, 16, 144, 584, 20, 0);
+            addControl(window, L"BUTTON", tr(Text::Browse), WS_TABSTOP, 504, 104, 96, 26, 202);
+            addControl(window, L"BUTTON", tr(Text::Detect), WS_TABSTOP, 608, 104, 100, 26, 204);
+            addControl(window, L"STATIC", tr(Text::ParserLabel), 0, 16, 144, 692, 20, 303);
             addControl(window, L"EDIT", settings.parser.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 168, 584, 26, 103);
-            addControl(window, L"STATIC", L"Timeout in milliseconds (1000 - 120000)", 0, 16, 208, 420, 20, 0);
+            addControl(window, L"STATIC", tr(Text::TimeoutLabel), 0, 16, 208, 420, 20, 304);
             addControl(window, L"EDIT", std::to_wstring(settings.timeoutMs).c_str(), WS_TABSTOP | ES_NUMBER, 450, 204, 150, 26, 104);
             addControl(window, L"STATIC", L"", 0, 16, 244, 692, 44, 105);
-            addControl(window, L"BUTTON", L"Save", WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 300, 100, 30, IDOK);
-            addControl(window, L"BUTTON", L"Cancel", WS_TABSTOP, 608, 300, 100, 30, IDCANCEL);
+            addControl(window, L"BUTTON", tr(Text::Save), WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 300, 100, 30, IDOK);
+            addControl(window, L"BUTTON", tr(Text::Cancel), WS_TABSTOP, 608, 300, 100, 30, IDCANCEL);
+            setDetectionStatus(window, Text::Empty);
             SendMessageW(host._nppHandle, NPPM_MODELESSDIALOG, MODELESSDIALOGADD, reinterpret_cast<LPARAM>(window));
             return 0;
         }
@@ -185,7 +241,7 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
             detectionFinished = false;
             KillTimer(window, 2);
             if (!detectionResult.path.empty()) SetDlgItemTextW(window, detectionResult.field, detectionResult.path.c_str());
-            SetDlgItemTextW(window, 105, detectionResult.message.c_str());
+            setDetectionStatus(window, detectionResult.error.empty() ? Text::Detected : Text::DetectionFailed, detectionResult.error);
             detectionControls(window, true);
             if (GetActiveWindow() == window)
                 SetFocus(GetDlgItem(window, detectionResult.field == 101 ? 203 : 204));
@@ -202,14 +258,16 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
                 next.parser = controlText(window, 103);
                 std::wstring timeout = controlText(window, 104);
                 size_t end = 0;
-                unsigned long value = std::stoul(timeout, &end);
+                unsigned long value;
+                try { value = std::stoul(timeout, &end); }
+                catch (const std::exception&) { throw std::runtime_error(utf8(tr(Text::TimeoutError))); }
                 if (end != timeout.size() || value < 1000 || value > 120000)
-                    throw std::runtime_error("Timeout must be between 1000 and 120000 milliseconds.");
+                    throw std::runtime_error(utf8(tr(Text::TimeoutError)));
                 next.timeoutMs = value;
                 if (!fs::path(next.node).is_absolute() || !fs::is_regular_file(next.node))
-                    throw std::runtime_error("Select an existing absolute node.exe path.");
+                    throw std::runtime_error(utf8(tr(Text::NodePathError)));
                 if (!fs::path(next.prettier).is_absolute() || !fs::is_regular_file(fs::path(next.prettier) / L"package.json"))
-                    throw std::runtime_error("Select the Prettier package directory containing package.json.");
+                    throw std::runtime_error(utf8(tr(Text::PrettierPathError)));
                 saveSettings(next);
                 DestroyWindow(window); return 0;
             }
@@ -227,7 +285,7 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
 }
 void openSettings() {
     if (settingsWindow) { SetForegroundWindow(settingsWindow); return; }
-    settingsWindow = CreateWindowExW(WS_EX_CONTROLPARENT, L"NppFormatterSettings", L"NppFormatter settings",
+    settingsWindow = CreateWindowExW(WS_EX_CONTROLPARENT, L"NppFormatterSettings", tr(Text::SettingsTitle),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
         CW_USEDEFAULT, CW_USEDEFAULT, 740, 380, host._nppHandle, nullptr, instance, nullptr);
 }
@@ -247,7 +305,7 @@ std::string readText(HWND editor) {
 void formatDocument() {
     try {
         if (shuttingDown) return;
-        if (worker.joinable()) { status(L"NppFormatter: formatting already in progress"); return; }
+        if (worker.joinable()) { status(Text::Busy); return; }
         loadSettings();
         if (settings.node.empty() || settings.prettier.empty()) { openSettings(); return; }
         HWND editor = currentEditor();
@@ -283,7 +341,7 @@ void formatDocument() {
             completion = std::move(result);
             finished.store(true, std::memory_order_release);
         });
-        status(L"NppFormatter: formatting...");
+        status(Text::Formatting);
     } catch (const std::exception& error) { showError(error.what()); }
 }
 void applyCompletion() {
@@ -299,17 +357,17 @@ void applyCompletion() {
         sci(editor, SCI_GETSELECTIONMODE) != SC_SEL_STREAM ||
         request.cursor != sci(editor, SCI_GETCURRENTPOS) || request.anchor != sci(editor, SCI_GETANCHOR) ||
         request.text != readText(editor)) {
-        status(L"NppFormatter: document changed; result discarded"); return;
+        status(Text::Discarded); return;
     }
     if (!result->error.empty()) throw std::runtime_error(result->error);
     if (!result->response.value("ok", false)) throw std::runtime_error(result->response.value("error", "Invalid bridge response."));
-    if (result->response.value("ignored", false)) { status(L"NppFormatter: skipped by .prettierignore"); return; }
+    if (result->response.value("ignored", false)) { status(Text::Ignored); return; }
     auto formatted = result->response.at("formatted").get<std::string>();
     auto textWide = wide(formatted);
     auto cursor = result->response.at("cursorOffset").get<int64_t>();
     if (cursor < 0 || static_cast<size_t>(cursor) > textWide.size()) throw std::runtime_error("Invalid cursor in bridge response.");
     size_t byteCursor = utf8(textWide.substr(0, static_cast<size_t>(cursor))).size();
-    if (formatted == request.text) { status(L"NppFormatter: already formatted"); return; }
+    if (formatted == request.text) { status(Text::Unchanged); return; }
     LRESULT firstLine = sci(editor, SCI_GETFIRSTVISIBLELINE), xOffset = sci(editor, SCI_GETXOFFSET);
     sci(editor, SCI_BEGINUNDOACTION);
     sci(editor, SCI_SETTARGETRANGE, 0, static_cast<LPARAM>(request.text.size()));
@@ -317,22 +375,18 @@ void applyCompletion() {
     sci(editor, SCI_ENDUNDOACTION);
     sci(editor, SCI_SETSEL, byteCursor, byteCursor);
     sci(editor, SCI_SETFIRSTVISIBLELINE, firstLine); sci(editor, SCI_SETXOFFSET, xOffset);
-    status(L"NppFormatter: formatted (Ctrl+Z to undo)");
+    status(Text::Formatted);
 }
 LRESULT CALLBACK timerProc(HWND window, UINT message, WPARAM w, LPARAM l) {
     if (message == WM_TIMER && finished.load(std::memory_order_acquire)) {
         try { applyCompletion(); }
-        catch (const std::exception& error) { status(L"NppFormatter: formatting failed"); showError(error.what()); }
+        catch (const std::exception& error) { status(Text::FormatFailed); showError(error.what()); }
         return 0;
     }
     return DefWindowProcW(window, message, w, l);
 }
 void about() {
-    MessageBoxW(host._nppHandle,
-        L"NppFormatter 0.1.0 prototype\n\nRequires user-installed Node.js 18+ and Prettier 3.x.\n"
-        L"Configure both paths in Settings. UTF-8 buffers, full-document formatting.\n"
-        L"Assign a shortcut through Notepad++ Shortcut Mapper.\n\n"
-        L"No Node.js runtime or Prettier package is bundled.", L"NppFormatter", MB_OK);
+    MessageBoxW(host._nppHandle, tr(Text::AboutBody), tr(Text::AboutTitle), MB_OK);
 }
 void shutdown() {
     shuttingDown = true; cancelled = true;
@@ -352,7 +406,7 @@ BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, LPVOID) {
 extern "C" __declspec(dllexport) BOOL isUnicode() { return TRUE; }
 extern "C" __declspec(dllexport) const wchar_t* getName() { return L"NppFormatter"; }
 extern "C" __declspec(dllexport) FuncItem* getFuncsArray(int* count) {
-    const wchar_t* names[]{L"Format document", L"Settings...", L"About"};
+    const wchar_t* names[]{tr(Text::Format), tr(Text::Settings), tr(Text::About)};
     PFUNCPLUGINCMD callbacks[]{formatDocument, openSettings, about};
     for (int i = 0; i < 3; ++i) { wcscpy_s(commands[i]._itemName, names[i]); commands[i]._pFunc = callbacks[i]; }
     *count = 3; return commands;
@@ -384,6 +438,7 @@ extern "C" __declspec(dllexport) void setInfo(NppData data) {
 }
 extern "C" __declspec(dllexport) void beNotified(SCNotification* notification) {
     switch (notification->nmhdr.code) {
+    case NPPN_READY: case NPPN_NATIVELANGCHANGED: refreshLanguage(); break;
     case SCN_MODIFIED:
         if (notification->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)) ++generation;
         break;

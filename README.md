@@ -159,6 +159,21 @@ Click **Save**. Select the package directory itself, not its `bin` directory or 
 
 ## Usage
 
+### Interface language
+
+The plugin follows **Notepad++'s interface language**, independently of the Windows display language. English, Simplified Chinese, and Traditional Chinese are supported; the Hong Kong Chinese locale uses Traditional Chinese. Other locales fall back to English.
+
+Menus, Settings labels/buttons, detection guidance, settings validation messages, About, and formatting status messages are translated. Changing the language in Notepad++ Preferences updates the plugin menu and an open Settings window immediately, preserving unsaved fields and the current detection operation. No separate language setting or restart is required. External tool diagnostics remain in their original language; Windows supplies the standard file-picker and message-box buttons.
+
+| English | Simplified Chinese | Traditional Chinese |
+|---|---|---|
+| Format document | 格式化文档 | 格式化文件 |
+| Settings... | 配置... | 設定... |
+| About | 关于 | 關於 |
+| Auto-detect | 自动检测 | 自動偵測 |
+
+### Formatting
+
 Select **Plugins → NppFormatter → Format document**. To assign a shortcut, locate the command under **Settings → Shortcut Mapper → Plugin commands**.
 
 | Menu command | Behavior |
@@ -243,6 +258,8 @@ The smoke test locates Notepad++ through `NPP_EXE`, `PATH`, or the standard inst
 CI builds x86 and x64 on `windows-latest`, and ARM64 on `windows-11-arm`. Each job runs native process tests and the matching portable editor test before uploading a ZIP and checksum. The portable test editor is pinned to Notepad++ 8.9.6 with a SHA-256 check. Workflow configuration alone does not establish a test pass; inspect the run for each architecture. No release is published automatically.
 
 Code is split between `src/` (native plugin and process management), `bridge/` (Prettier integration), and `tests/`. The prototype runs one Node.js process per request and allows one active request at a time.
+
+Editor tests run in English, Simplified Chinese, and Traditional Chinese by default. Use `--language en`, `--language zh-CN`, or `--language zh-TW` to select one. The portable test editor must include the corresponding official localization XML files; `tests/download_npp.py` extracts them from the hash-verified archive. Tests also switch languages through Notepad++ Preferences with unsaved Settings fields. Translations are centralized in `src/i18n.hpp`; CI runs all three languages for every CPU architecture.
 
 ## Roadmap and contributing
 
