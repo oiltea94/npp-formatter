@@ -288,8 +288,24 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
 void openSettings() {
     if (settingsWindow) { SetForegroundWindow(settingsWindow); return; }
     settingsWindow = CreateWindowExW(WS_EX_CONTROLPARENT, L"NppFormatterSettings", tr(Text::SettingsTitle),
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
         CW_USEDEFAULT, CW_USEDEFAULT, 740, 380, host._nppHandle, nullptr, instance, nullptr);
+    if (!settingsWindow) return;
+    RECT owner{}, window{};
+    if (GetWindowRect(host._nppHandle, &owner) && GetWindowRect(settingsWindow, &window)) {
+        LONG width = window.right - window.left, height = window.bottom - window.top;
+        LONG x = owner.left + (owner.right - owner.left - width) / 2;
+        LONG y = owner.top + (owner.bottom - owner.top - height) / 2;
+        MONITORINFO monitor{};
+        monitor.cbSize = sizeof(monitor);
+        if (GetMonitorInfoW(MonitorFromWindow(host._nppHandle, MONITOR_DEFAULTTONEAREST), &monitor)) {
+            const auto& work = monitor.rcWork;
+            x = std::clamp(x, work.left, std::max(work.left, work.right - width));
+            y = std::clamp(y, work.top, std::max(work.top, work.bottom - height));
+        }
+        SetWindowPos(settingsWindow, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    ShowWindow(settingsWindow, SW_SHOW);
 }
 HWND currentEditor() {
     int view = 0;

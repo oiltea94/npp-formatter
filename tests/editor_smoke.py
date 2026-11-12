@@ -75,6 +75,17 @@ USER32.IsWindow.argtypes = [W.HWND]
 USER32.GetDlgCtrlID.argtypes = [W.HWND]
 USER32.GetParent.argtypes = [W.HWND]
 USER32.GetParent.restype = W.HWND
+USER32.IsWindowVisible.argtypes = [W.HWND]
+USER32.SetWindowPos.argtypes = [W.HWND, W.HWND, C.c_int, C.c_int, C.c_int, C.c_int, W.UINT]
+USER32.MonitorFromWindow.argtypes = [W.HWND, W.DWORD]
+USER32.MonitorFromWindow.restype = W.HANDLE
+
+
+class MonitorInfo(C.Structure):
+    _fields_ = [('size', W.DWORD), ('monitor', W.RECT), ('work', W.RECT), ('flags', W.DWORD)]
+
+
+USER32.GetMonitorInfoW.argtypes = [W.HANDLE, C.POINTER(MonitorInfo)]
 
 
 def window_class(window):
@@ -237,7 +248,22 @@ def run(sandbox, architecture, language='en'):
             setting_command = menu_command(USER32.GetMenu(main_window), labels['settings'])
             assert setting_command is not None
             USER32.PostMessageW(main_window, 0x111, setting_command, 0)
-            return until(lambda: next((w for w in windows(process.pid) if window_class(w) == 'NppFormatterSettings'), None))
+            dialog = until(lambda: next((w for w in windows(process.pid)
+                                        if window_class(w) == 'NppFormatterSettings' and USER32.IsWindowVisible(w)), None))
+            owner, bounds = W.RECT(), W.RECT()
+            assert USER32.GetWindowRect(main_window, C.byref(owner))
+            assert USER32.GetWindowRect(dialog, C.byref(bounds))
+            monitor = MonitorInfo()
+            monitor.size = C.sizeof(monitor)
+            assert USER32.GetMonitorInfoW(USER32.MonitorFromWindow(main_window, 2), C.byref(monitor))
+            width, height = bounds.right - bounds.left, bounds.bottom - bounds.top
+            x = owner.left + int((owner.right - owner.left - width) / 2)
+            y = owner.top + int((owner.bottom - owner.top - height) / 2)
+            work = monitor.work
+            x = max(work.left, min(x, max(work.left, work.right - width)))
+            y = max(work.top, min(y, max(work.top, work.bottom - height)))
+            assert abs(bounds.left - x) <= 1 and abs(bounds.top - y) <= 1, 'Settings is not centered on its owner'
+            return dialog
 
         def detect(dialog, identifier):
             USER32.PostMessageW(dialog, 0x111, identifier, 0)
@@ -286,6 +312,13 @@ def run(sandbox, architecture, language='en'):
         assert ini_path.read_bytes() == before, 'Detection saved settings without Save'
         USER32.PostMessageW(dialog, 0x111, 2, 0)
         until(lambda: not USER32.IsWindow(dialog))
+        # Reopening follows the moved owner and stays inside the monitor work area.
+        original_bounds = W.RECT()
+        assert USER32.GetWindowRect(main_window, C.byref(original_bounds))
+        monitor = MonitorInfo()
+        monitor.size = C.sizeof(monitor)
+        assert USER32.GetMonitorInfoW(USER32.MonitorFromWindow(main_window, 2), C.byref(monitor))
+        assert USER32.SetWindowPos(main_window, None, monitor.work.left - 200, monitor.work.top + 40, 820, 600, 0x14)
         dialog = open_settings()
         assert control_text(dialog, 102) == str(ROOT / 'node_modules' / 'prettier')
         USER32.PostMessageW(dialog, 0x111, 203, 0)
@@ -295,6 +328,9 @@ def run(sandbox, architecture, language='en'):
         until(lambda: not USER32.IsWindow(dialog))
         assert time.monotonic() - started < 2, 'Cancel blocked during detection'
         assert ini_path.read_bytes() == before
+        assert USER32.SetWindowPos(main_window, None, original_bounds.left, original_bounds.top,
+                                  original_bounds.right - original_bounds.left,
+                                  original_bounds.bottom - original_bounds.top, 0x14)
         dialog = open_settings()
         detect(dialog, 204)
         USER32.PostMessageW(dialog, 0x111, 1, 0)
@@ -305,6 +341,7 @@ def run(sandbox, architecture, language='en'):
         assert os.path.samefile(saved['Formatter']['NodePath'], node), 'Saved Node path differs from detected executable'
         assert ini_path.with_suffix('.ini.bak').read_bytes() == before
         print('PASS settings: detection buttons, Node/project discovery, preserve on failure, Cancel and explicit Save', flush=True)
+        print('PASS settings placement: owner centering, moved owner and screen-edge clamping', flush=True)
 
         if language == 'en':
             dialog = open_settings()
