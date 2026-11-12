@@ -111,34 +111,55 @@ def window_title(window):
     return title.value
 
 
+def run_ui_automation(script):
+    # UIA calls belong on a windowless MTA thread, not PowerShell's default STA.
+    # https://learn.microsoft.com/windows/win32/winauto/uiauto-threading
+    command = ['powershell', '-NoProfile', '-NonInteractive', '-Mta', '-Command', script]
+    try:
+        return subprocess.run(command, check=True, capture_output=True,
+                              encoding='utf-8', timeout=15).stdout
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+        diagnostic = error.stderr or ''
+        if isinstance(diagnostic, bytes):
+            diagnostic = diagnostic.decode('utf-8', errors='replace')
+        raise RuntimeError(f'UI Automation helper failed: {diagnostic.strip()}') from error
+
+
 def accessible_text(window):
     # Task Dialog draws its body with DirectUI, which does not expose WM_GETTEXT.
     script = f'''
         $ErrorActionPreference = 'Stop'
         [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+        [Console]::Error.WriteLine('UIA: loading assemblies')
         Add-Type -AssemblyName UIAutomationClient
+        [Console]::Error.WriteLine('UIA: locating dialog')
         $root = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]{window})
+        [Console]::Error.WriteLine('UIA: enumerating descendants')
         $elements = $root.FindAll([Windows.Automation.TreeScope]::Descendants,
                                  [Windows.Automation.Condition]::TrueCondition)
+        [Console]::Error.WriteLine('UIA: reading names')
         foreach ($element in $elements) {{ $element.Current.Name }}
     '''
-    return subprocess.check_output(['powershell', '-NoProfile', '-Command', script],
-                                   encoding='utf-8', timeout=15)
+    return run_ui_automation(script)
 
 
 def invoke_accessible(window, name):
     escaped = name.replace("'", "''")
     script = f'''
         $ErrorActionPreference = 'Stop'
+        [Console]::Error.WriteLine('UIA: loading assemblies')
         Add-Type -AssemblyName UIAutomationClient
+        [Console]::Error.WriteLine('UIA: locating dialog')
         $root = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]{window})
         $condition = [Windows.Automation.PropertyCondition]::new(
             [Windows.Automation.AutomationElement]::NameProperty, '{escaped}')
+        [Console]::Error.WriteLine('UIA: locating control')
         $target = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
+        [Console]::Error.WriteLine('UIA: invoking control')
         $pattern = $target.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)
         $pattern.Invoke()
     '''
-    subprocess.run(['powershell', '-NoProfile', '-Command', script], check=True, timeout=15)
+    run_ui_automation(script)
 
 
 def windows(pid):
