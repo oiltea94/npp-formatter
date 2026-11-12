@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="#tool-support">Tool support</a> ·
+  <a href="#formatting-languages">Formatting languages</a> ·
   <a href="#installation">Installation</a> ·
   <a href="#usage">Usage</a> ·
   <a href="#troubleshooting">Troubleshooting</a> ·
@@ -41,6 +42,32 @@ Inspired by [Formatter for Sublime Text](https://packages.sublimetext.com/packag
 | Tool pipelines | Planned | Run tools in order and apply the final result once |
 
 External tools are installed by the user. In the target architecture, runtime dependencies belong to each adapter: Node.js is required for Prettier, not for the generic plugin core. **The current prototype still requires Node.js and Prettier**, because it only implements that adapter.
+
+## Formatting languages
+
+The following **13 choices** are available in the language picker and **Format with language...**. They use Prettier's built-in parsers; no additional language package is needed. The examples below were checked with Prettier **3.6.2**. Actual syntax support depends on the installed Prettier version.
+
+| Language / format | Common saved-file extensions | Picker choice |
+|---|---|---|
+| JavaScript, JSX | `.js`, `.mjs`, `.cjs`, `.jsx` | JavaScript / JSX |
+| TypeScript, TSX | `.ts`, `.mts`, `.cts`, `.tsx` | TypeScript / TSX |
+| JSON | `.json` | JSON |
+| JSON5 | `.json5` | JSON5 |
+| HTML | `.html`, `.htm` | HTML |
+| CSS | `.css` | CSS |
+| SCSS | `.scss` | SCSS |
+| Less | `.less` | Less |
+| YAML | `.yaml`, `.yml` | YAML |
+| Markdown | `.md`, `.markdown` | Markdown |
+| GraphQL | `.graphql`, `.gql` | GraphQL |
+| Vue single-file components | `.vue` | Vue |
+| Angular templates | `.component.html` | Angular HTML |
+
+**Additional saved-file formats:** Flow (`.js.flow`), JSON with comments (`.jsonc`), MDX (`.mdx`), Handlebars (`.hbs`, `.handlebars`), MJML (`.mjml`), PostCSS (`.pcss`, `.postcss`), and JSON.stringify-style JSON (`.importmap`). These are inferred by Prettier from the file path; they have no dedicated picker entry. A saved file's project configuration may also select a built-in parser explicitly, such as `lwc` for Lightning Web Components. Extension examples are not an exhaustive list.
+
+**Untitled documents:** automatic mapping from Notepad++'s document language currently covers JavaScript, TypeScript, JSON, JSON5, HTML, CSS, and YAML. For the other picker choices, use **Format with language...**, or keep the document in plain text and select a language when prompted. MDX and Handlebars are distinct formats; choosing Markdown or HTML is not equivalent.
+
+**Scope:** Java is not a built-in language or a picker choice. C/C++ and Python adapters are still planned. Additional languages require separately installed tools or project plugins. Notepad++ syntax highlighting alone does not add formatting support.
 
 ## Example
 
@@ -180,7 +207,7 @@ Select **Plugins → NppFormatter → Format document**. To assign a shortcut, l
 |---|---|
 | Format document | Format the entire current buffer, including unsaved edits |
 | Settings... | Configure dependency paths and timeout |
-| About | Show the plugin version and runtime requirements |
+| About | Show the plugin version, formatting languages, and runtime requirements |
 | Format with language... | Choose a language for this operation only, including for saved files; keep the file type, remembered language, project options, and ignore rules |
 
 - **Saved documents:** the file path is passed to Prettier for parser inference and configuration lookup. Common built-in formats include JavaScript, TypeScript, JSON, HTML, CSS, Markdown, and YAML.

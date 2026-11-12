@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="#工具支持">工具支持</a> ·
+  <a href="#格式化语言">格式化语言</a> ·
   <a href="#安装">安装</a> ·
   <a href="#使用">使用</a> ·
   <a href="#常见问题">常见问题</a> ·
@@ -41,6 +42,32 @@ NppFormatter 的设计参考 [Sublime Text 的 Formatter](https://packages.subli
 | 工具串联 | 规划中 | 按顺序执行多个工具，最后统一回写 |
 
 外部工具由用户自行安装。在目标架构中，运行依赖归属于各个适配器：Prettier 需要 Node.js，通用插件核心不统一要求 Node.js。**当前原型仍需安装 Node.js 和 Prettier**，因为目前仅实现了这一种接入。
+
+## 格式化语言
+
+语言选择窗口和 **“按指定语言格式化...”** 当前提供以下 **13 个选项**，均使用 Prettier 内置解析器，无需额外安装语言包。下表中的示例已使用 Prettier **3.6.2** 验证；具体语法支持取决于用户安装的 Prettier 版本。
+
+| 语言 / 格式 | 常见已保存文件扩展名 | 选择器选项 |
+|---|---|---|
+| JavaScript、JSX | `.js`、`.mjs`、`.cjs`、`.jsx` | JavaScript / JSX |
+| TypeScript、TSX | `.ts`、`.mts`、`.cts`、`.tsx` | TypeScript / TSX |
+| JSON | `.json` | JSON |
+| JSON5 | `.json5` | JSON5 |
+| HTML | `.html`、`.htm` | HTML |
+| CSS | `.css` | CSS |
+| SCSS | `.scss` | SCSS |
+| Less | `.less` | Less |
+| YAML | `.yaml`、`.yml` | YAML |
+| Markdown | `.md`、`.markdown` | Markdown |
+| GraphQL | `.graphql`、`.gql` | GraphQL |
+| Vue 单文件组件 | `.vue` | Vue |
+| Angular 模板 | `.component.html` | Angular HTML |
+
+**已保存文件还支持：** Flow（`.js.flow`）、带注释的 JSON（`.jsonc`）、MDX（`.mdx`）、Handlebars（`.hbs`、`.handlebars`）、MJML（`.mjml`）、PostCSS（`.pcss`、`.postcss`）和 JSON.stringify 风格的 JSON（`.importmap`）。这些格式由 Prettier 根据文件路径推断，暂未在选择器中提供独立选项。已保存文件也可通过项目配置显式指定内置解析器，例如 Lightning Web Components 使用的 `lwc`。这里列举的是常见扩展名，并非完整列表。
+
+**未保存文档：** 当前自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可使用“按指定语言格式化...”，或将文档保持为普通文本，在提示时选择语言。MDX 与 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。
+
+**支持范围：** Java 并非内置语言或选择器选项；C/C++、Python 适配器仍在规划中。其他语言需要单独安装工具或项目插件。Notepad++ 提供某种语言的语法高亮，并不代表插件已具备对应格式化能力。
 
 ## 格式化示例
 
@@ -180,7 +207,7 @@ Join-Path (npm root -g) 'prettier'
 |---|---|
 | Format document | 格式化当前缓冲区全文，包含尚未保存的修改 |
 | Settings... | 配置依赖路径和超时时间 |
-| About | 查看插件版本和运行要求 |
+| About | 查看插件版本、格式化语言和运行要求 |
 | Format with language... | 选择仅本次生效的语言，适用于已保存文件；保留文件类型、记住的语言、项目选项及忽略规则 |
 
 - **已保存文档**：将文件路径传给 Prettier，用于推断解析器和查找配置。常见内置格式包括 JavaScript、TypeScript、JSON、HTML、CSS、Markdown 和 YAML。
