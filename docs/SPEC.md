@@ -60,6 +60,11 @@ Implemented slices:
 2. Native plugin: explicit node.exe/package paths, settings, background process,
    timeout, full-buffer formatting, one-step undo, stale-result rejection.
 3. Build and isolated Notepad++ smoke test. Package only runtime plugin files.
+4. Settings discovery: separate background Auto-detect buttons for Node.js and
+   Prettier. Resolve Node shims to the actual executable and require Node.js 18+;
+   prefer the saved document's nearest Prettier 3.x package over configured/global
+   locations. No installation or project-code execution during discovery. Fill
+   fields only; persist on Save, preserve old values on failure, cancel on close.
 
 The supported build targets are Notepad++ x86, x64, and ARM64 with UTF-8 Scintilla buffers. Existing non-UTF-8
 buffers receive a clear message asking the user to convert the encoding first.

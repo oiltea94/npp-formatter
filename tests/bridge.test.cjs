@@ -7,11 +7,11 @@ const os = require('node:os');
 const bridge = path.resolve(__dirname, '../bridge/bridge.cjs');
 const prettierPath = path.dirname(require.resolve('prettier/package.json'));
 
-function invoke(overrides, raw) {
+function invoke(overrides, raw, env = process.env) {
   const request = { text: '{"中文":"😀","a":1}', parser: 'json',
     prettierPath, cursorOffset: 0, ...overrides };
   const child = spawnSync(process.execPath, [bridge], {
-    input: raw ?? JSON.stringify(request), encoding: 'utf8', timeout: 10000,
+    input: raw ?? JSON.stringify(request), encoding: 'utf8', timeout: 10000, env,
   });
   assert.ifError(child.error);
   assert.ok(child.stdout, child.stderr);
@@ -74,4 +74,67 @@ test('invalid JSON produces a machine-readable error', () => {
 test('CRLF preference is preserved when configuration does not override it', () => {
   const result = invoke({ text: 'const x=1;\r\nconst y=2;\r\n', parser: 'babel', endOfLine: 'crlf' });
   assert.equal(result.formatted, 'const x = 1;\r\nconst y = 2;\r\n');
+});
+
+function discoveryProject(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'npp discovery 中文 '));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+function packageFixture(dir, metadata = { name: 'prettier', version: '3.6.2' }) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(metadata));
+  // Discovery must not execute a project's package or configuration.
+  fs.writeFileSync(path.join(dir, 'index.js'), 'throw new Error("must not execute");');
+  return dir;
+}
+
+test('Node detection returns the actual executable without requiring formatting input', () => {
+  const result = invoke({}, JSON.stringify({ operation: 'detectNode' }));
+  assert.equal(result.ok, true);
+  assert.equal(result.nodePath, process.execPath);
+  assert.equal(result.version, process.versions.node);
+});
+
+test('Prettier detection prefers the nearest project package without executing it', (t) => {
+  const dir = discoveryProject(t);
+  packageFixture(path.join(dir, 'node_modules/prettier'));
+  const nearest = packageFixture(path.join(dir, 'nested/node_modules/prettier'));
+  const result = invoke({ operation: 'detectPrettier', filePath: path.join(dir, 'nested/src/input.js') });
+  assert.equal(result.ok, true);
+  assert.equal(result.prettierPath, fs.realpathSync(nearest));
+});
+
+test('Prettier detection skips incompatible and broken packages', (t) => {
+  const dir = discoveryProject(t);
+  const expected = packageFixture(path.join(dir, 'node_modules/prettier'));
+  const near = path.join(dir, 'nested/node_modules/prettier');
+  for (const metadata of [
+    { name: 'prettier', version: '2.8.8' },
+    { name: 'unrelated', version: '3.0.0' },
+    { name: 'prettier', version: '3.0.0', main: 'missing.cjs' },
+  ]) {
+    packageFixture(near, metadata);
+    // Remove index fallback so require.resolve rejects the broken main.
+    if (metadata.main) fs.unlinkSync(path.join(near, 'index.js'));
+    const result = invoke({ operation: 'detectPrettier', filePath: path.join(dir, 'nested/input.js') });
+    assert.equal(result.ok, true);
+    assert.equal(result.prettierPath, fs.realpathSync(expected));
+  }
+});
+
+test('Prettier detection follows a custom npm global prefix', (t) => {
+  const dir = discoveryProject(t);
+  const prefix = path.join(dir, 'global tools');
+  const expected = packageFixture(path.join(prefix, 'node_modules/prettier'));
+  const userconfig = path.join(dir, '.npmrc');
+  fs.writeFileSync(userconfig, `prefix=${prefix.replaceAll('\\', '/')}\n`);
+  const env = { ...process.env, npm_config_userconfig: userconfig };
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === 'npm_config_prefix') delete env[key];
+  }
+  const result = invoke({ operation: 'detectPrettier', filePath: undefined, prettierPath: '' }, undefined, env);
+  assert.equal(result.ok, true);
+  assert.equal(result.prettierPath, fs.realpathSync(expected));
 });

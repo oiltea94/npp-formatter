@@ -5,11 +5,70 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { createRequire } = require('node:module');
 const { format } = require('node:util');
+const { spawnSync } = require('node:child_process');
 
 // Project configuration may log messages. stdout belongs to the protocol.
 console.log = (...args) => process.stderr.write(format(...args) + '\n');
 console.info = console.log;
 console.debug = console.log;
+
+function findPrettier(directory) {
+  if (typeof directory !== 'string' || !path.isAbsolute(directory)) return undefined;
+  try {
+    const metadata = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'));
+    if (metadata.name !== 'prettier' || typeof metadata.version !== 'string' ||
+        !/^3\.\d+\.\d+(?:[-+].*)?$/.test(metadata.version)) return undefined;
+    require.resolve(directory); // Check the entry exists without loading package code.
+    return fs.realpathSync(directory);
+  } catch { return undefined; }
+}
+
+function detectPrettier(request) {
+  if (request.filePath && !path.isAbsolute(request.filePath)) throw new Error('filePath must be absolute.');
+  if (request.filePath) {
+    let dir = path.dirname(request.filePath);
+    while (true) {
+      const found = findPrettier(path.join(dir, 'node_modules', 'prettier'));
+      if (found) return { ok: true, prettierPath: found };
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  const current = findPrettier(request.prettierPath);
+  if (current) return { ok: true, prettierPath: current };
+
+  // Invoke npm's JS entry with the selected Node; no shell, downloads or installs.
+  const nodeDir = path.dirname(process.execPath);
+  const appData = process.env.APPDATA;
+  const directories = [nodeDir, appData && path.join(appData, 'npm'),
+    ...(process.env.PATH ?? '').split(path.delimiter).map(dir => dir.replace(/^"|"$/g, ''))];
+  const tried = new Set();
+  for (const directory of directories) {
+    if (!directory || !path.isAbsolute(directory)) continue;
+    let cli;
+    try { cli = fs.realpathSync(path.join(directory, 'node_modules/npm/bin/npm-cli.js')); }
+    catch { continue; }
+    if (tried.has(cli)) continue;
+    tried.add(cli);
+    const result = spawnSync(process.execPath, [cli, 'root', '--global'], {
+      encoding: 'utf8', timeout: 2500, maxBuffer: 1024 * 1024, windowsHide: true,
+    });
+    if (!result.error && result.status === 0 && result.stdout.trim()) {
+      const found = findPrettier(path.join(result.stdout.trim(), 'prettier'));
+      if (found) return { ok: true, prettierPath: found };
+    }
+    if (tried.size >= 2) break;
+  }
+  // These locations also work for a portable Node installation without npm.
+  const roots = [process.env.npm_config_prefix, appData && path.join(appData, 'npm'), nodeDir];
+  for (const root of roots) {
+    if (!root || !path.isAbsolute(root)) continue;
+    const found = findPrettier(path.join(root, 'node_modules/prettier'));
+    if (found) return { ok: true, prettierPath: found };
+  }
+  throw new Error('Prettier 3.x was not found. Install it in your project or globally, or use Browse.');
+}
 
 function nearestIgnore(filePath) {
   let dir = path.dirname(filePath);
@@ -23,6 +82,11 @@ function nearestIgnore(filePath) {
 }
 
 async function run(request) {
+  if (request?.operation === 'detectNode') {
+    if (Number(process.versions.node.split('.')[0]) < 18) throw new Error('Node.js 18 or later is required.');
+    return { ok: true, nodePath: process.execPath, version: process.versions.node };
+  }
+  if (request?.operation === 'detectPrettier') return detectPrettier(request);
   if (!request || typeof request.text !== 'string') throw new Error('text must be a string.');
   if (!Number.isInteger(request.cursorOffset) || request.cursorOffset < 0 ||
       request.cursorOffset > request.text.length) throw new Error('Invalid UTF-16 cursorOffset.');

@@ -121,6 +121,15 @@ Keep `bridge.cjs` beside the DLL; copying only the DLL is not sufficient.
 
 ### 3. Configure the paths
 
+Click **Auto-detect** to the right of each **Browse...** button: detect Node.js first, then Prettier. Detection fills the fields; click **Save** to persist them. A failed detection keeps the previous path, and **Cancel** discards unsaved changes, including while detection is running.
+
+- **Node.js:** searches `PATH`, common installation locations, NVM/Volta locations, and the existing field. It probes candidates for Node.js 18+ and uses the actual executable path returned by Node.js.
+- **Prettier:** uses the Node.js field; searches the current saved file's directory and ancestors for `node_modules/prettier`, then the existing field, npm's global root (including custom prefixes), and common global locations. It accepts Prettier 3.x packages with a resolvable entry. Detection does not load project configuration or run Prettier package code.
+
+Detection runs in the background without installing dependencies. For an unsaved document, the project-directory search is skipped. If detection finds nothing, install the dependency or select it with **Browse...**. Restart Notepad++ after changing `PATH`. Detecting a project package does not enable automatic switching between projects.
+
+To locate the paths manually:
+
 Find the actual Node.js executable:
 
 ```powershell

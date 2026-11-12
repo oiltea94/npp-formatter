@@ -6,6 +6,7 @@
 #include "PluginInterface.h"
 #include "json.hpp"
 #include "bridge_process.hpp"
+#include "dependency_discovery.hpp"
 
 namespace fs = std::filesystem;
 using nlohmann::json;
@@ -33,6 +34,10 @@ struct Request {
 struct Completion { Request request; json response; std::string error; };
 std::unique_ptr<Completion> completion;
 FuncItem commands[3];
+std::thread detectionWorker;
+std::atomic<bool> detectionCancelled{false}, detectionFinished{false};
+struct DetectionResult { int field; std::wstring path, message; };
+DetectionResult detectionResult;
 
 LRESULT sci(HWND editor, UINT message, WPARAM w = 0, LPARAM l = 0) {
     return SendMessageW(editor, message, w, l);
@@ -105,27 +110,92 @@ void browse(HWND window, bool node) {
         SetDlgItemTextW(window, node ? 101 : 102, selected.c_str());
     }
 }
+void detectionControls(HWND window, bool enabled) {
+    for (int id : {101, 102, 201, 202, 203, 204, IDOK})
+        EnableWindow(GetDlgItem(window, id), enabled);
+}
+void stopDetection() {
+    detectionCancelled = true;
+    if (detectionWorker.joinable()) detectionWorker.join();
+    detectionFinished = false;
+}
+void startDetection(HWND window, bool node) {
+    if (detectionWorker.joinable()) return;
+    auto selectedNode = controlText(window, 101);
+    auto selectedPrettier = controlText(window, 102);
+    if (!node && (selectedNode.empty() || !fs::path(selectedNode).is_absolute() || !fs::is_regular_file(selectedNode))) {
+        SetDlgItemTextW(window, 105, L"Detect or browse for Node.js first, then detect Prettier.");
+        return;
+    }
+    wchar_t filename[32768]{};
+    SendMessageW(host._nppHandle, NPPM_GETFULLCURRENTPATH, 32768, reinterpret_cast<LPARAM>(filename));
+    std::wstring filePath = fs::path(filename).is_absolute() ? filename : L"";
+    auto bridge = (pluginDirectory / L"bridge.cjs").wstring();
+    detectionCancelled = false; detectionFinished = false;
+    if (!SetTimer(window, 2, 50, nullptr)) throw std::runtime_error("Could not start detection timer.");
+    try {
+        detectionWorker = std::thread([node, selectedNode, selectedPrettier, filePath, bridge] {
+            DetectionResult result{node ? 101 : 102, {}, {}};
+            try {
+                if (node) result.path = formatter::detectNode(selectedNode, bridge, detectionCancelled);
+                else {
+                    json request{{"operation", "detectPrettier"}, {"prettierPath", utf8(selectedPrettier)}};
+                    if (!filePath.empty()) request["filePath"] = utf8(filePath);
+                    auto process = formatter::runBridge(selectedNode, bridge, request.dump(), 10000, detectionCancelled);
+                    auto response = json::parse(process.output);
+                    if (process.exitCode != 0 || !response.value("ok", false))
+                        throw std::runtime_error(response.value("error", "Prettier detection failed."));
+                    result.path = wide(response.at("prettierPath").get<std::string>());
+                }
+                result.message = L"Detected. Click Save to keep the paths.";
+            } catch (const std::exception& error) {
+                try { result.message = wide(error.what()); }
+                catch (...) { result.message = L"Detection failed. Use Browse to select the dependency."; }
+            }
+            detectionResult = std::move(result);
+            detectionFinished.store(true, std::memory_order_release);
+        });
+    } catch (...) { KillTimer(window, 2); throw; }
+    detectionControls(window, false);
+    SetDlgItemTextW(window, 105, node ? L"Detecting Node.js..." : L"Detecting Prettier...");
+}
 LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
     try {
         if (message == WM_CREATE) {
             addControl(window, L"STATIC", L"Node.js executable (node.exe)", 0, 16, 16, 550, 20, 0);
             addControl(window, L"EDIT", settings.node.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 40, 480, 26, 101);
             addControl(window, L"BUTTON", L"Browse...", WS_TABSTOP, 504, 40, 96, 26, 201);
+            addControl(window, L"BUTTON", L"Auto-detect", WS_TABSTOP, 608, 40, 100, 26, 203);
             addControl(window, L"STATIC", L"Prettier 3.x package directory (browse to its package.json)", 0, 16, 80, 580, 20, 0);
             addControl(window, L"EDIT", settings.prettier.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 104, 480, 26, 102);
             addControl(window, L"BUTTON", L"Browse...", WS_TABSTOP, 504, 104, 96, 26, 202);
+            addControl(window, L"BUTTON", L"Auto-detect", WS_TABSTOP, 608, 104, 100, 26, 204);
             addControl(window, L"STATIC", L"Untitled-document parser (e.g. json, babel, typescript, html, css, markdown)", 0, 16, 144, 584, 20, 0);
             addControl(window, L"EDIT", settings.parser.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 168, 584, 26, 103);
             addControl(window, L"STATIC", L"Timeout in milliseconds (1000 - 120000)", 0, 16, 208, 420, 20, 0);
             addControl(window, L"EDIT", std::to_wstring(settings.timeoutMs).c_str(), WS_TABSTOP | ES_NUMBER, 450, 204, 150, 26, 104);
-            addControl(window, L"BUTTON", L"Save", WS_TABSTOP | BS_DEFPUSHBUTTON, 388, 254, 100, 30, IDOK);
-            addControl(window, L"BUTTON", L"Cancel", WS_TABSTOP, 500, 254, 100, 30, IDCANCEL);
+            addControl(window, L"STATIC", L"", 0, 16, 244, 692, 44, 105);
+            addControl(window, L"BUTTON", L"Save", WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 300, 100, 30, IDOK);
+            addControl(window, L"BUTTON", L"Cancel", WS_TABSTOP, 608, 300, 100, 30, IDCANCEL);
             SendMessageW(host._nppHandle, NPPM_MODELESSDIALOG, MODELESSDIALOGADD, reinterpret_cast<LPARAM>(window));
+            return 0;
+        }
+        if (message == WM_TIMER && w == 2 && detectionFinished.load(std::memory_order_acquire)) {
+            detectionWorker.join();
+            detectionFinished = false;
+            KillTimer(window, 2);
+            if (!detectionResult.path.empty()) SetDlgItemTextW(window, detectionResult.field, detectionResult.path.c_str());
+            SetDlgItemTextW(window, 105, detectionResult.message.c_str());
+            detectionControls(window, true);
+            if (GetActiveWindow() == window)
+                SetFocus(GetDlgItem(window, detectionResult.field == 101 ? 203 : 204));
             return 0;
         }
         if (message == WM_COMMAND) {
             int id = LOWORD(w);
+            if (detectionWorker.joinable() && (id == IDOK || (id >= 201 && id <= 204))) return 0;
             if (id == 201 || id == 202) { browse(window, id == 201); return 0; }
+            if (id == 203 || id == 204) { startDetection(window, id == 203); return 0; }
             if (id == IDOK) {
                 Settings next;
                 next.node = controlText(window, 101); next.prettier = controlText(window, 102);
@@ -147,6 +217,8 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
         }
         if (message == WM_CLOSE) { DestroyWindow(window); return 0; }
         if (message == WM_DESTROY) {
+            KillTimer(window, 2);
+            stopDetection();
             SendMessageW(host._nppHandle, NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, reinterpret_cast<LPARAM>(window));
             settingsWindow = nullptr; return 0;
         }
@@ -157,7 +229,7 @@ void openSettings() {
     if (settingsWindow) { SetForegroundWindow(settingsWindow); return; }
     settingsWindow = CreateWindowExW(WS_EX_CONTROLPARENT, L"NppFormatterSettings", L"NppFormatter settings",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-        CW_USEDEFAULT, CW_USEDEFAULT, 632, 334, host._nppHandle, nullptr, instance, nullptr);
+        CW_USEDEFAULT, CW_USEDEFAULT, 740, 380, host._nppHandle, nullptr, instance, nullptr);
 }
 HWND currentEditor() {
     int view = 0;

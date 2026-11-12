@@ -41,6 +41,11 @@ KERNEL32.VirtualFreeEx.argtypes = [W.HANDLE, C.c_void_p, C.c_size_t, W.DWORD]
 KERNEL32.WriteProcessMemory.argtypes = [W.HANDLE, C.c_void_p, C.c_void_p, C.c_size_t, C.c_void_p]
 KERNEL32.ReadProcessMemory.argtypes = [W.HANDLE, C.c_void_p, C.c_void_p, C.c_size_t, C.c_void_p]
 KERNEL32.CloseHandle.argtypes = [W.HANDLE]
+USER32.GetDlgItem.argtypes = [W.HWND, C.c_int]
+USER32.GetDlgItem.restype = W.HWND
+USER32.GetWindowRect.argtypes = [W.HWND, C.POINTER(W.RECT)]
+USER32.IsWindowEnabled.argtypes = [W.HWND]
+USER32.IsWindow.argtypes = [W.HWND]
 
 
 def window_class(window):
@@ -127,10 +132,14 @@ def run(sandbox, architecture):
     expected = 'const emoji = "😀";\nconst answer = 42; // 中文\n'
     document = sandbox / 'input.js'
     document.write_text(original, encoding='utf-8', newline='\n')
+    project_prettier = sandbox / 'node_modules' / 'prettier'
+    shutil.copytree(ROOT / 'node_modules' / 'prettier', project_prettier)
     startup = subprocess.STARTUPINFO()
     startup.dwFlags = subprocess.STARTF_USESHOWWINDOW
     startup.wShowWindow = 0
-    process = subprocess.Popen([str(sandbox / 'notepad++.exe'), '-multiInst', '-nosession', '-noUpdater', str(document)], startupinfo=startup)
+    environment = os.environ.copy()
+    environment['PATH'] = str(Path(node).parent) + os.pathsep + environment.get('PATH', '')
+    process = subprocess.Popen([str(sandbox / 'notepad++.exe'), '-multiInst', '-nosession', '-noUpdater', str(document)], startupinfo=startup, env=environment)
     handle = memory = main_window = editor = None
     try:
         main_window = until(lambda: next((w for w in windows(process.pid) if window_class(w) == 'Notepad++'), None))
@@ -154,6 +163,70 @@ def run(sandbox, architecture):
             return read_bytes(size + 1)[:size].decode('utf-8')
 
         editor = until(lambda: next((w for w in controls if text(w) == original), None))
+
+        def get_control(dialog, identifier):
+            return USER32.GetDlgItem(dialog, identifier)
+
+        def control_text(dialog, identifier):
+            control = get_control(dialog, identifier)
+            buffer = C.create_unicode_buffer(send(control, 14, 0, 0) + 1)
+            send(control, 13, len(buffer), C.addressof(buffer))
+            return buffer.value
+
+        def set_control(dialog, identifier, value):
+            buffer = C.create_unicode_buffer(value)
+            send(get_control(dialog, identifier), 12, 0, C.addressof(buffer))
+
+        def open_settings():
+            setting_command = menu_command(USER32.GetMenu(main_window), 'Settings...')
+            assert setting_command is not None
+            USER32.PostMessageW(main_window, 0x111, setting_command, 0)
+            return until(lambda: next((w for w in windows(process.pid) if window_class(w) == 'NppFormatterSettings'), None))
+
+        def detect(dialog, identifier):
+            USER32.PostMessageW(dialog, 0x111, identifier, 0)
+            until(lambda: 'Detecting ' in control_text(dialog, 105))
+            assert not USER32.IsWindowEnabled(get_control(dialog, 1)), 'Save stayed enabled during detection'
+            until(lambda: USER32.IsWindowEnabled(get_control(dialog, identifier)), timeout=15)
+            assert control_text(dialog, 105).startswith('Detected.'), control_text(dialog, 105)
+
+        ini_path = config_dir / 'NppFormatter.ini'
+        before = ini_path.read_bytes()
+        dialog = open_settings()
+        for browse_id, detect_id in ((201, 203), (202, 204)):
+            browse_rect, detect_rect = W.RECT(), W.RECT()
+            assert get_control(dialog, detect_id), 'Auto-detect button is missing'
+            USER32.GetWindowRect(get_control(dialog, browse_id), C.byref(browse_rect))
+            USER32.GetWindowRect(get_control(dialog, detect_id), C.byref(detect_rect))
+            assert detect_rect.left > browse_rect.right, 'Auto-detect is not after Browse'
+        set_control(dialog, 101, '')
+        set_control(dialog, 102, 'keep this value')
+        USER32.PostMessageW(dialog, 0x111, 204, 0)
+        until(lambda: 'Node.js first' in control_text(dialog, 105))
+        assert control_text(dialog, 102) == 'keep this value'
+        detect(dialog, 203)
+        assert os.path.samefile(control_text(dialog, 101), node)
+        detect(dialog, 204)
+        assert os.path.samefile(control_text(dialog, 102), project_prettier)
+        assert ini_path.read_bytes() == before, 'Detection saved settings without Save'
+        USER32.PostMessageW(dialog, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        dialog = open_settings()
+        assert control_text(dialog, 102) == str(ROOT / 'node_modules' / 'prettier')
+        USER32.PostMessageW(dialog, 0x111, 203, 0)
+        until(lambda: 'Detecting ' in control_text(dialog, 105))
+        started = time.monotonic()
+        USER32.PostMessageW(dialog, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        assert time.monotonic() - started < 2, 'Cancel blocked during detection'
+        assert ini_path.read_bytes() == before
+        dialog = open_settings()
+        detect(dialog, 204)
+        USER32.PostMessageW(dialog, 0x111, 1, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        assert str(project_prettier) in ini_path.read_text(encoding='utf-16')
+        assert ini_path.with_suffix('.ini.bak').read_bytes() == before
+        print('PASS settings: detection buttons, Node/project discovery, preserve on failure, Cancel and explicit Save', flush=True)
 
         def set_text(value):
             raw = value.encode('utf-8') + b'\0'
@@ -197,7 +270,7 @@ def run(sandbox, architecture):
         assert text(editor) == changed, 'Stale result overwrote the edit'
         print('PASS real editor: responsive during formatting; stale result discarded', flush=True)
         project_config.unlink()
-        report = {'architecture': architecture, 'checks': 5, 'result': 'PASS'}
+        report = {'architecture': architecture, 'checks': 6, 'result': 'PASS'}
         (ROOT / 'build' / architecture / 'editor-smoke.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     finally:
         if editor:
