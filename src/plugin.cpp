@@ -398,16 +398,16 @@ HRESULT CALLBACK aboutCallback(HWND dialog, UINT notification, WPARAM, LPARAM li
     return S_OK;
 }
 void about() {
-    std::wstring footer = std::wstring(tr(Text::ProjectHomepage)) + L"\n<a href=\"" +
-        projectHomepage + L"\">" + projectHomepage + L"</a>";
+    std::wstring content = std::wstring(tr(Text::AboutBody)) + L"\n\n" +
+        tr(Text::ProjectHomepage) + L" <a href=\"" + projectHomepage + L"\">" + projectHomepage + L"</a>";
     TASKDIALOGCONFIG dialog{};
     dialog.cbSize = sizeof(dialog);
     dialog.hwndParent = host._nppHandle;
     dialog.dwFlags = TDF_ENABLE_HYPERLINKS | TDF_ALLOW_DIALOG_CANCELLATION | TDF_POSITION_RELATIVE_TO_WINDOW;
     dialog.dwCommonButtons = TDCBF_OK_BUTTON;
     dialog.pszWindowTitle = tr(Text::AboutTitle);
-    dialog.pszContent = tr(Text::AboutBody);
-    dialog.pszFooter = footer.c_str();
+    dialog.pszContent = content.c_str();
+    dialog.cxWidth = 360;
     dialog.pfCallback = aboutCallback;
     if (FAILED(TaskDialogIndirect(&dialog, nullptr, nullptr, nullptr)))
         MessageBoxW(host._nppHandle, tr(Text::AboutDialogError), tr(Text::ErrorTitle), MB_OK | MB_ICONERROR);

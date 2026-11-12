@@ -362,15 +362,25 @@ def run(sandbox, architecture, language='en'):
         send(about_dialog, 13, len(title), C.addressof(title))
         assert title.value == labels['about_title'], title.value
         body = []
-        for control in children(about_dialog):
+        about_controls = children(about_dialog)
+        for control in about_controls:
             buffer = C.create_unicode_buffer(send(control, 14, 0, 0) + 1)
             send(control, 13, len(buffer), C.addressof(buffer))
             body.append(buffer.value)
         about_text = accessible_text(about_dialog)
         assert labels['about_body'] in about_text, about_text
         homepage = 'https://github.com/oiltea94/npp-formatter'
-        links = [w for w in children(about_dialog) if window_class(w) == 'SysLink']
-        assert any(f'<a href="{homepage}">{homepage}</a>' in window_title(w) for w in links), body
+        homepage_label = {'en': 'Project homepage:', 'zh-CN': '项目主页：', 'zh-TW': '專案首頁：'}[language]
+        homepage_line = f'{homepage_label} <a href="{homepage}">{homepage}</a>'
+        links = [w for w, text in zip(about_controls, body)
+                 if window_class(w) == 'SysLink' and text.endswith(homepage_line)]
+        assert len(links) == 1, body
+        content_rect, button_rect = W.RECT(), W.RECT()
+        buttons = [w for w in about_controls if window_class(w) == 'Button']
+        assert len(buttons) == 1, body
+        assert USER32.GetWindowRect(links[0], C.byref(content_rect))
+        assert USER32.GetWindowRect(buttons[0], C.byref(button_rect))
+        assert content_rect.bottom <= button_rect.top, 'Homepage must be above the OK button'
         USER32.PostMessageW(about_dialog, 0x10, 0, 0)
         until(lambda: not USER32.IsWindow(about_dialog))
         print(f'PASS localization: {language} menu, settings, detection messages and About', flush=True)
