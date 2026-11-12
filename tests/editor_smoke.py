@@ -1,6 +1,7 @@
 """Exercise the built plugin in a separate, hidden portable Notepad++ instance."""
 import ctypes as C
 import argparse
+import configparser
 from ctypes import wintypes as W
 import json
 import os
@@ -224,7 +225,10 @@ def run(sandbox, architecture):
         detect(dialog, 204)
         USER32.PostMessageW(dialog, 0x111, 1, 0)
         until(lambda: not USER32.IsWindow(dialog))
-        assert str(project_prettier) in ini_path.read_text(encoding='utf-16')
+        saved = configparser.ConfigParser(interpolation=None)
+        saved.read(ini_path, encoding='utf-16')
+        assert os.path.samefile(saved['Formatter']['PrettierPath'], project_prettier), 'Saved Prettier path differs from detected package'
+        assert os.path.samefile(saved['Formatter']['NodePath'], node), 'Saved Node path differs from detected executable'
         assert ini_path.with_suffix('.ini.bak').read_bytes() == before
         print('PASS settings: detection buttons, Node/project discovery, preserve on failure, Cancel and explicit Save', flush=True)
 
