@@ -134,8 +134,16 @@ async function run(request) {
     filepath: filePath, cursorOffset: request.cursorOffset,
   };
   if (parser) options.parser = parser;
-  const result = await prettier.formatWithCursor(request.text, options);
-  return { ok: true, ...result, version: prettier.version, configFile };
+  try {
+    const result = await prettier.formatWithCursor(request.text, options);
+    return { ok: true, ...result, version: prettier.version, configFile };
+  } catch (error) {
+    process.exitCode = 1;
+    return {
+      ok: false, error: `${error.name}: ${error.message}`,
+      canChooseParser: Boolean(error.loc || error.name === 'SyntaxError' || error.name === 'UndefinedParserError'),
+    };
+  }
 }
 
 (async () => {

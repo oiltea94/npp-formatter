@@ -167,6 +167,7 @@ Menus, Settings labels/buttons, detection guidance, settings validation messages
 | English | Simplified Chinese | Traditional Chinese |
 |---|---|---|
 | Format document | 格式化文档 | 格式化文件 |
+| Format with language... | 按指定语言格式化... | 依指定語言格式化... |
 | Settings... | 配置... | 設定... |
 | About | 关于 | 關於 |
 | Auto-detect | 自动检测 | 自動偵測 |
@@ -180,13 +181,15 @@ Select **Plugins → NppFormatter → Format document**. To assign a shortcut, l
 | Format document | Format the entire current buffer, including unsaved edits |
 | Settings... | Configure dependency paths and timeout |
 | About | Show the plugin version and runtime requirements |
+| Format with language... | Choose a language for this operation only, including for saved files; keep the file type, remembered language, project options, and ignore rules |
 
 - **Saved documents:** the file path is passed to Prettier for parser inference and configuration lookup. Common built-in formats include JavaScript, TypeScript, JSON, HTML, CSS, Markdown, and YAML.
-- **Untitled documents:** the formatter follows the document language selected in Notepad++ for JavaScript, TypeScript, JSON, JSON5, HTML, CSS, and YAML. For plain text, valid JSON is detected automatically in the background. Otherwise, a language picker appears when you format; its choice is remembered only for that document during the current session. Closing or saving the document, or changing its language in Notepad++, clears the choice. Cancel leaves the text unchanged. These documents have no project path for configuration lookup.
+- **Untitled documents:** the formatter follows the document language selected in Notepad++ for JavaScript, TypeScript, JSON, JSON5, HTML, CSS, and YAML. For plain text, valid JSON is detected automatically in the background. Otherwise, a language picker appears when you format; its choice is remembered only for that document during the current session. Replacing all text (including clearing and pasting again), closing or saving the document, or changing its language in Notepad++, clears the choice. Ordinary edits and the formatter's own text replacement preserve it. Cancel leaves the text unchanged. These documents have no project path for configuration lookup.
 - **Existing settings:** the old global `UntitledParser` value is ignored and removed the next time settings are saved; dependency paths and timeout are retained. To correct a document's remembered choice, select its language in Notepad++ (or switch to another language and back to plain text to choose again).
 - **Selections:** the command still formats the whole document. After replacement, an ordinary selection collapses to the mapped caret. Multiple carets and rectangular selections are not supported in this prototype.
 - **While formatting:** editing, switching documents, saving, or changing the caret/selection can cause the pending result to be discarded. Run the command again once you are ready.
 - **Failures:** syntax errors, missing dependencies, and timeouts leave the original text intact. The status bar reports progress, ignored files, unchanged output, and discarded results.
+- **Parser recovery:** parsing failures offer **Show error details** and **Choose another language...**. The original diagnostic is retained; choosing another language retries only after your confirmation. For an untitled document using a remembered choice, the correction is remembered. For saved files or documents with a supported language selected in Notepad++, it applies only to that operation. Dependency, project-configuration, and timeout errors do not trigger language recovery. The formatter never silently tries unrelated languages.
 
 ### Project configuration
 
@@ -212,8 +215,8 @@ Files matching the ignore rules are skipped. The document's LF or CRLF setting i
 | Formatting opens Settings | Configure both dependency paths before the first request |
 | Node.js does not start | Use the actual absolute `node.exe` path returned by `process.execPath` |
 | Prettier cannot be loaded | Select a Prettier 3.x package directory containing `package.json`, not `prettier.cmd` |
-| An untitled document gives a syntax error | Check its language in Notepad++; change the language to clear a remembered choice, or save it with a suitable extension |
-| A saved file gives a parser or syntax error | Check its extension, contents, and project configuration |
+| An untitled document gives a syntax error | Inspect the original error details; correct the code or choose another language. Replacing all text clears a remembered choice |
+| A saved file gives a parser or syntax error | Check its extension, contents, and project configuration; use Format with language... for a one-time override |
 | A file is skipped or a result is discarded | Check `.prettierignore`; rerun formatting after editing or switching documents |
 | Formatting times out | Inspect project config/plugins and increase the timeout if needed |
 | The plugin asks for UTF-8 | Select **Encoding → Convert to UTF-8**, then retry |

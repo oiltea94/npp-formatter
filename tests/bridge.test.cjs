@@ -51,12 +51,53 @@ test('returns a structured syntax error without a replacement', () => {
   assert.equal(result.ok, false);
   assert.equal(result.formatted, undefined);
   assert.match(result.error, /SyntaxError|Expected|Unexpected/);
+  assert.equal(result.canChooseParser, true);
+  assert.equal(result.exitCode, 1);
 });
 
 test('rejects invalid dependency paths rather than loading another installation', () => {
   const result = invoke({ prettierPath: path.join(os.tmpdir(), 'missing-npp-prettier-package') });
   assert.equal(result.ok, false);
   assert.match(result.error, /Prettier|prettier/);
+  assert.notEqual(result.canChooseParser, true);
+});
+
+test('only parser failures offer language recovery', (t) => {
+  for (const [parser, text] of [['babel', 'const value:number=1;'], ['css', 'a { color:'], ['yaml', 'value: [']]) {
+    const result = invoke({ parser, text });
+    assert.equal(result.ok, false, parser);
+    assert.equal(result.canChooseParser, true, parser);
+    assert.equal(result.formatted, undefined);
+  }
+  const invalidParser = invoke({ parser: 'missing-parser' });
+  assert.equal(invalidParser.ok, false);
+  assert.notEqual(invalidParser.canChooseParser, true);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'npp bad config '));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, '.prettierrc'), '{invalid');
+  const badConfig = invoke({ filePath: path.join(dir, 'input.js'), parser: undefined });
+  assert.equal(badConfig.ok, false);
+  assert.notEqual(badConfig.canChooseParser, true);
+});
+
+test('a one-time parser override keeps project options and ignore rules', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'npp parser override '));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, '.prettierrc'), '{"parser":"json","singleQuote":true,"semi":false}');
+  fs.writeFileSync(path.join(dir, '.prettierignore'), 'ignored.json\n');
+  const result = invoke({ text: 'const s="hello";', parser: 'babel', filePath: path.join(dir, 'input.json') });
+  assert.equal(result.ok, true);
+  assert.equal(result.formatted, "const s = 'hello'\n");
+  const ignored = invoke({ parser: 'babel', filePath: path.join(dir, 'ignored.json') });
+  assert.equal(ignored.ignored, true);
+});
+
+test('an unknown saved extension offers a language choice', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'npp unknown extension '));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const result = invoke({ parser: undefined, filePath: path.join(dir, 'input.unknown-npp-format') });
+  assert.equal(result.ok, false);
+  assert.equal(result.canChooseParser, true);
 });
 
 test('requests a document language without a replacement when none is known', () => {

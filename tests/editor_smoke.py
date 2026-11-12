@@ -17,19 +17,19 @@ from verify_package import MACHINES, PE, verify_dll
 
 ROOT = Path(__file__).resolve().parents[1]
 LANGUAGES = {
-    'en': {'file': None, 'format': 'Format document', 'settings': 'Settings...', 'about': 'About',
+    'en': {'file': None, 'format': 'Format document', 'format_as': 'Format with language...', 'settings': 'Settings...', 'about': 'About',
            'title': 'NppFormatter settings', 'browse': 'Browse...', 'detect': 'Auto-detect',
            'save': 'Save', 'cancel': 'Cancel', 'detecting': 'Detecting ', 'detected': 'Detected.',
            'node_first': 'Node.js first', 'unchanged': 'already formatted',
            'formatting': 'NppFormatter: formatting...', 'discarded': 'result discarded',
            'about_title': 'About NppFormatter', 'about_body': 'Requires user-installed Node.js 18+'},
-    'zh-CN': {'file': 'chineseSimplified.xml', 'format': '格式化文档', 'settings': '配置...', 'about': '关于',
+    'zh-CN': {'file': 'chineseSimplified.xml', 'format': '格式化文档', 'format_as': '按指定语言格式化...', 'settings': '配置...', 'about': '关于',
               'title': 'NppFormatter 配置', 'browse': '浏览...', 'detect': '自动检测',
               'save': '保存', 'cancel': '取消', 'detecting': '正在检测', 'detected': '检测成功',
               'node_first': '先检测或浏览选择 Node.js', 'unchanged': '无需格式化',
               'formatting': 'NppFormatter：正在格式化...', 'discarded': '已丢弃结果',
               'about_title': '关于 NppFormatter', 'about_body': '需要自行安装 Node.js 18+'},
-    'zh-TW': {'file': 'taiwaneseMandarin.xml', 'format': '格式化文件', 'settings': '設定...', 'about': '關於',
+    'zh-TW': {'file': 'taiwaneseMandarin.xml', 'format': '格式化文件', 'format_as': '依指定語言格式化...', 'settings': '設定...', 'about': '關於',
               'title': 'NppFormatter 設定', 'browse': '瀏覽...', 'detect': '自動偵測',
               'save': '儲存', 'cancel': '取消', 'detecting': '正在偵測', 'detected': '偵測成功',
               'node_first': '先偵測或瀏覽選擇 Node.js', 'unchanged': '無需格式化',
@@ -42,6 +42,11 @@ SETTING_ERRORS = {
     'zh-TW': ('NppFormatter 錯誤', '逾時時間必須為 1000 至 120000 毫秒。'),
 }
 PARSER_TITLES = {'en': 'Choose document language', 'zh-CN': '选择文档语言', 'zh-TW': '選擇文件語言'}
+PARSE_ERRORS = {
+    'en': ('Formatting could not parse this document', 'Show error details', 'Choose another language...'),
+    'zh-CN': ('格式化时未能解析文档', '查看错误详情', '重新选择语言...'),
+    'zh-TW': ('格式化時未能解析文件', '查看錯誤詳情', '重新選擇語言...'),
+}
 USER32 = C.WinDLL('user32', use_last_error=True)
 KERNEL32 = C.WinDLL('kernel32', use_last_error=True)
 CALLBACK = C.WINFUNCTYPE(W.BOOL, W.HWND, W.LPARAM)
@@ -114,6 +119,21 @@ def accessible_text(window):
     '''
     return subprocess.check_output(['powershell', '-NoProfile', '-Command', script],
                                    encoding='utf-8', timeout=15)
+
+
+def invoke_accessible(window, name):
+    escaped = name.replace("'", "''")
+    script = f'''
+        $ErrorActionPreference = 'Stop'
+        Add-Type -AssemblyName UIAutomationClient
+        $root = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]{window})
+        $condition = [Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::NameProperty, '{escaped}')
+        $target = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
+        $pattern = $target.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)
+        $pattern.Invoke()
+    '''
+    subprocess.run(['powershell', '-NoProfile', '-Command', script], check=True, timeout=15)
 
 
 def windows(pid):
@@ -380,6 +400,7 @@ def run(sandbox, architecture, language='en'):
                 assert menu_command(USER32.GetMenu(main_window), translated['format']) == command
                 assert menu_command(USER32.GetMenu(main_window), translated['settings']) is not None
                 assert menu_command(USER32.GetMenu(main_window), translated['about']) is not None
+                assert menu_command(USER32.GetMenu(main_window), translated['format_as']) is not None
                 if target == 'zh-CN':
                     until(lambda: USER32.IsWindowEnabled(get_control(dialog, 203)), timeout=15)
                     assert os.path.samefile(control_text(dialog, 101), node)
@@ -493,14 +514,29 @@ def run(sandbox, architecture, language='en'):
             USER32.PostMessageW(main_window, 0x111, command, 0)
             until(lambda: text(editor) == expected_text)
 
-        def open_picker():
-            USER32.PostMessageW(main_window, 0x111, command, 0)
+        def replace_part(old, new):
+            current = text(editor).encode('utf-8')
+            start = current.index(old.encode('utf-8'))
+            raw = new.encode('utf-8')
+            assert KERNEL32.WriteProcessMemory(handle, memory, C.c_char_p(raw), len(raw), None)
+            send(editor, 2190, start, 0)  # SCI_SETTARGETSTART
+            send(editor, 2192, start + len(old.encode('utf-8')), 0)  # SCI_SETTARGETEND
+            send(editor, 2194, len(raw), memory)  # SCI_REPLACETARGET
+
+        format_as_command = menu_command(USER32.GetMenu(main_window), labels['format_as'])
+        assert format_as_command is not None
+
+        def wait_picker():
             picker = until(lambda: next((w for w in windows(process.pid)
                                         if window_class(w) == '#32770' and window_title(w) == PARSER_TITLES[language]), None))
             assert control_text(picker, 1) == labels['format']
             assert control_text(picker, 2) == labels['cancel']
             assert not USER32.IsWindowEnabled(get_control(picker, 1)), 'Picker must require an explicit choice'
             return picker
+
+        def open_picker(command_id=command):
+            USER32.PostMessageW(main_window, 0x111, command_id, 0)
+            return wait_picker()
 
         def choose(picker, name):
             combo = get_control(picker, 401)
@@ -534,7 +570,7 @@ def run(sandbox, architecture, language='en'):
         picker = open_picker()
         choose(picker, 'JavaScript / JSX')
         until(lambda: text(editor) == 'const first = 1;\n')
-        set_text('const second=2;')
+        replace_part('first = 1', 'second=2')
         format_to('const second = 2;\n')
 
         second = new_document('const third=3;')
@@ -542,7 +578,7 @@ def run(sandbox, architecture, language='en'):
         USER32.PostMessageW(picker, 0x111, 2, 0)
         until(lambda: not USER32.IsWindow(picker))
         activate(first)
-        set_text('const fourth=4;')
+        replace_part('second = 2', 'fourth=4')
         format_to('const fourth = 4;\n')
         assert send(main_window, 2024 + 6, 0, 85)  # Changing language clears the manual choice.
         set_text('const fifth:number=5;')
@@ -573,7 +609,75 @@ def run(sandbox, architecture, language='en'):
         format_to('{ "saved": 1 }\n')
         assert ini_path.read_bytes() == settings_before_parsers, 'Document choice must not write global settings'
         print('PASS untitled: localized picker, cancel, per-document memory, tab isolation, language change, close cleanup and saved-file inference', flush=True)
-        report = {'architecture': architecture, 'language': language, 'checks': 10,
+
+        def replace_document(value):
+            raw = value.encode('utf-8') + b'\0'
+            assert KERNEL32.WriteProcessMemory(handle, memory, C.c_char_p(raw), len(raw), None)
+            send(editor, 2160, 0, -1)  # Select all, then replace selection as paste does.
+            send(editor, 2170, 0, memory)
+
+        def wait_parse_error():
+            title, details, retry = PARSE_ERRORS[language]
+            dialog = until(lambda: next((w for w in windows(process.pid)
+                                        if window_class(w) == '#32770' and window_title(w) == title), None))
+            assert retry in accessible_text(dialog)
+            return dialog
+
+        # The saved JSON file can be formatted as JavaScript for one operation only.
+        set_text('const temporary=7;')
+        picker = open_picker(format_as_command)
+        USER32.PostMessageW(picker, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(picker))
+        assert text(editor) == 'const temporary=7;'
+        choose(open_picker(format_as_command), 'JavaScript / JSX')
+        until(lambda: text(editor) == 'const temporary = 7;\n')
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        error_dialog = wait_parse_error()  # Normal formatting still uses the .json extension.
+        USER32.PostMessageW(error_dialog, 0x10, 0, 0)
+        until(lambda: not USER32.IsWindow(error_dialog))
+        assert text(editor) == 'const temporary = 7;\n'
+        print('PASS one-time language override: saved file, cancellation and unchanged default parser', flush=True)
+
+        new_document('const old=1;')
+        choose(open_picker(), 'JavaScript / JSX')
+        until(lambda: text(editor) == 'const old = 1;\n')
+        replace_document('{"new":2}')
+        format_to('{ "new": 2 }\n')
+        replace_document('const again=3;')
+        choose(open_picker(), 'JavaScript / JSX')
+        until(lambda: text(editor) == 'const again = 3;\n')
+        replace_document('')
+        replace_document('body{color:red}')
+        choose(open_picker(), 'CSS')
+        until(lambda: text(editor) == 'body {\n  color: red;\n}\n')
+        replace_part('red', 'blue')
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        until(lambda: labels['unchanged'] in status())  # Plugin writeback retained the CSS choice.
+        assert text(editor) == 'body {\n  color: blue;\n}\n'
+        print('PASS parser memory: select-all replacement and clear/paste reset; partial edits and formatter writeback retain choice', flush=True)
+
+        new_document('const count=1;')
+        choose(open_picker(), 'JavaScript / JSX')
+        until(lambda: text(editor) == 'const count = 1;\n')
+        replace_part('count = 1', 'count:number=1')
+        invalid_js = text(editor)
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        error_dialog = wait_parse_error()
+        invoke_accessible(error_dialog, PARSE_ERRORS[language][1])
+        assert 'SyntaxError' in accessible_text(error_dialog), 'Original parser diagnostic was lost'
+        assert text(editor) == invalid_js
+        USER32.PostMessageW(error_dialog, 0x10, 0, 0)
+        until(lambda: not USER32.IsWindow(error_dialog))
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        error_dialog = wait_parse_error()
+        USER32.PostMessageW(error_dialog, 1024 + 102, 100, 0)  # TDM_CLICK_BUTTON: retry
+        choose(wait_picker(), 'TypeScript / TSX')
+        until(lambda: text(editor) == 'const count: number = 1;\n')
+        replace_part('count: number = 1', 'next:string="ok"')
+        format_to('const next: string = "ok";\n')
+        assert ini_path.read_bytes() == settings_before_parsers
+        print('PASS parser recovery: original details, no replacement on failure, explicit retry and remembered correction', flush=True)
+        report = {'architecture': architecture, 'language': language, 'checks': 13,
                   'live_language_switch': language == 'en', 'result': 'PASS'}
         (ROOT / 'build' / architecture / f'editor-smoke-{language}.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     finally:

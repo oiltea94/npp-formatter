@@ -30,7 +30,9 @@ uint64_t generation = 0;
 bool shuttingDown = false;
 struct Settings { std::wstring node, prettier; DWORD timeoutMs = 10000; };
 Settings settings;
-std::unordered_map<UINT_PTR, std::string> documentParsers;
+struct DocumentParser { std::string parser; LRESULT document; };
+std::unordered_map<UINT_PTR, DocumentParser> documentParsers;
+LRESULT applyingDocument = 0;
 bool choosingParser = false;
 struct Request {
     HWND editor;
@@ -39,10 +41,11 @@ struct Request {
     uint64_t generation;
     LRESULT cursor, anchor;
     std::string text, payload;
+    bool rememberChoice = false;
 };
 struct Completion { Request request; json response; std::string error; };
 std::unique_ptr<Completion> completion;
-FuncItem commands[3];
+FuncItem commands[4];
 std::thread detectionWorker;
 std::atomic<bool> detectionCancelled{false}, detectionFinished{false};
 struct DetectionResult { int field; std::wstring path, error; };
@@ -161,9 +164,9 @@ void refreshLanguage() {
     char filename[256]{};
     SendMessageW(host._nppHandle, NPPM_GETNATIVELANGFILENAME, sizeof(filename), reinterpret_cast<LPARAM>(filename));
     uiLanguage = formatter::i18n::fromNativeFileName(filename);
-    const Text labels[]{Text::Format, Text::Settings, Text::About};
+    const Text labels[]{Text::Format, Text::Settings, Text::About, Text::FormatAs};
     auto menu = reinterpret_cast<HMENU>(SendMessageW(host._nppHandle, NPPM_GETMENUHANDLE, NPPPLUGINMENU, 0));
-    for (int i = 0; i < 3; ++i) {
+    for (size_t i = 0; i < std::size(commands); ++i) {
         wcscpy_s(commands[i]._itemName, tr(labels[i]));
         if (menu && commands[i]._cmdID) updateMenuLabel(menu, commands[i]._cmdID, tr(labels[i]));
     }
@@ -310,11 +313,11 @@ void openSettings() {
     centerOnHost(settingsWindow);
     ShowWindow(settingsWindow, SW_SHOW);
 }
-INT_PTR CALLBACK parserDialogProc(HWND window, UINT message, WPARAM w, LPARAM) {
+INT_PTR CALLBACK parserDialogProc(HWND window, UINT message, WPARAM w, LPARAM l) {
     if (message == WM_INITDIALOG) {
         SetWindowTextW(window, tr(Text::ParserTitle));
         SetWindowPos(window, nullptr, 0, 0, 550, 205, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-        addControl(window, L"STATIC", tr(Text::ParserPrompt), 0, 16, 16, 510, 44, 402);
+        addControl(window, L"STATIC", tr(l ? Text::ParserOncePrompt : Text::ParserPrompt), 0, 16, 16, 510, 44, 402);
         addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST,
                    16, 64, 510, 280, 401);
         for (const auto& choice : formatter::parserChoices)
@@ -340,7 +343,7 @@ INT_PTR CALLBACK parserDialogProc(HWND window, UINT message, WPARAM w, LPARAM) {
     if (message == WM_CLOSE) { EndDialog(window, 0); return TRUE; }
     return FALSE;
 }
-std::string chooseParser() {
+std::string chooseParser(bool temporary = false) {
     struct alignas(DWORD) EmptyDialog {
         DLGTEMPLATE dialog{};
         WORD menu = 0, windowClass = 0, title = 0;
@@ -348,11 +351,33 @@ std::string chooseParser() {
     layout.dialog.style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME;
     layout.dialog.cx = 280; layout.dialog.cy = 105;
     choosingParser = true;
-    auto selected = DialogBoxIndirectParamW(instance, &layout.dialog, host._nppHandle, parserDialogProc, 0);
+    auto selected = DialogBoxIndirectParamW(instance, &layout.dialog, host._nppHandle, parserDialogProc, temporary);
     choosingParser = false;
     if (selected == -1) throw std::runtime_error(utf8(tr(Text::ParserDialogError)));
     if (selected <= 0 || static_cast<size_t>(selected) > std::size(formatter::parserChoices)) return {};
     return formatter::parserChoices[selected - 1].parser;
+}
+bool offerParserRetry(const std::string& error) {
+    auto details = wide(error);
+    TASKDIALOG_BUTTON retry{100, tr(Text::ChooseAgain)};
+    TASKDIALOGCONFIG dialog{};
+    dialog.cbSize = sizeof(dialog);
+    dialog.hwndParent = host._nppHandle;
+    dialog.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_POSITION_RELATIVE_TO_WINDOW;
+    dialog.pszWindowTitle = tr(Text::ParseErrorTitle);
+    dialog.pszContent = tr(Text::ParseErrorPrompt);
+    dialog.pszExpandedInformation = details.c_str();
+    dialog.pszCollapsedControlText = tr(Text::ErrorDetails);
+    dialog.pszMainIcon = TD_WARNING_ICON;
+    dialog.dwCommonButtons = TDCBF_CLOSE_BUTTON;
+    dialog.cButtons = 1; dialog.pButtons = &retry;
+    dialog.nDefaultButton = IDCLOSE;
+    int selected = 0;
+    choosingParser = true;
+    auto result = TaskDialogIndirect(&dialog, &selected, nullptr, nullptr);
+    choosingParser = false;
+    if (FAILED(result)) { showError(error); return false; }
+    return selected == retry.nButtonID;
 }
 HWND currentEditor() {
     int view = 0;
@@ -367,7 +392,17 @@ std::string readText(HWND editor) {
     text.resize(static_cast<size_t>(length));
     return text;
 }
-void formatDocument() {
+bool requestIsCurrent(const Request& request) {
+    HWND editor = currentEditor();
+    return !shuttingDown && request.generation == generation && editor == request.editor &&
+        request.bufferId == static_cast<UINT_PTR>(SendMessageW(host._nppHandle, NPPM_GETCURRENTBUFFERID, 0, 0)) &&
+        request.document == sci(editor, SCI_GETDOCPOINTER) && !sci(editor, SCI_GETREADONLY) &&
+        sci(editor, SCI_GETCODEPAGE) == SC_CP_UTF8 && sci(editor, SCI_GETSELECTIONS) == 1 &&
+        sci(editor, SCI_GETSELECTIONMODE) == SC_SEL_STREAM &&
+        request.cursor == sci(editor, SCI_GETCURRENTPOS) && request.anchor == sci(editor, SCI_GETANCHOR) &&
+        request.text == readText(editor);
+}
+void formatCurrentDocument(std::string overrideParser = {}, bool promptForParser = false, bool rememberChoice = false) {
     try {
         if (shuttingDown) return;
         if (worker.joinable() || choosingParser) { status(Text::Busy); return; }
@@ -380,7 +415,12 @@ void formatDocument() {
         if (sci(editor, SCI_GETSELECTIONS) != 1 || sci(editor, SCI_GETSELECTIONMODE) != SC_SEL_STREAM)
             throw std::runtime_error("Use a single normal caret or selection before formatting.");
         Request request{editor, static_cast<UINT_PTR>(SendMessageW(host._nppHandle, NPPM_GETCURRENTBUFFERID, 0, 0)),
-            sci(editor, SCI_GETDOCPOINTER), generation, sci(editor, SCI_GETCURRENTPOS), sci(editor, SCI_GETANCHOR), readText(editor), {}};
+            sci(editor, SCI_GETDOCPOINTER), generation, sci(editor, SCI_GETCURRENTPOS), sci(editor, SCI_GETANCHOR), readText(editor), {}, rememberChoice};
+        if (promptForParser) {
+            overrideParser = chooseParser(true);
+            if (overrideParser.empty()) { status(Text::FormatCancelled); return; }
+            if (!requestIsCurrent(request)) { status(Text::Discarded); return; }
+        }
         auto length = SendMessageW(host._nppHandle, NPPM_GETFULLPATHFROMBUFFERID, request.bufferId, 0);
         if (length < 0) throw std::runtime_error("The document was closed.");
         std::wstring filename(static_cast<size_t>(length) + 1, L'\0');
@@ -389,13 +429,17 @@ void formatDocument() {
         json payload{{"text", request.text}, {"cursorOffset", wide(request.text.substr(0, request.cursor)).size()},
             {"prettierPath", utf8(settings.prettier)}, {"endOfLine", sci(editor, SCI_GETEOLMODE) == SC_EOL_CRLF ? "crlf" : "lf"}};
         if (fs::path(filename).is_absolute()) payload["filePath"] = utf8(filename);
-        else {
+        if (!overrideParser.empty()) payload["parser"] = overrideParser;
+        else if (!payload.contains("filePath")) {
             int language = L_TEXT;
             SendMessageW(host._nppHandle, NPPM_GETCURRENTLANGTYPE, 0, reinterpret_cast<LPARAM>(&language));
             if (auto parser = formatter::parserForLanguage(language)) payload["parser"] = parser;
-            else if (auto selected = documentParsers.find(request.bufferId); selected != documentParsers.end())
-                payload["parser"] = selected->second;
-            else payload["detectParser"] = language == L_TEXT;
+            else {
+                request.rememberChoice = true;
+                if (auto selected = documentParsers.find(request.bufferId); selected != documentParsers.end())
+                    payload["parser"] = selected->second.parser;
+                else payload["detectParser"] = language == L_TEXT;
+            }
         }
         request.payload = payload.dump();
         completion.reset(); cancelled = false; finished = false;
@@ -416,33 +460,36 @@ void formatDocument() {
         status(Text::Formatting);
     } catch (const std::exception& error) { showError(error.what()); }
 }
+void formatDocument() { formatCurrentDocument(); }
+void formatWithLanguage() { formatCurrentDocument({}, true); }
 void applyCompletion() {
     worker.join();
     auto result = std::move(completion);
     finished = false;
     auto& request = result->request;
     HWND editor = currentEditor();
-    if (request.generation != generation || editor != request.editor ||
-        request.bufferId != static_cast<UINT_PTR>(SendMessageW(host._nppHandle, NPPM_GETCURRENTBUFFERID, 0, 0)) ||
-        request.document != sci(editor, SCI_GETDOCPOINTER) || sci(editor, SCI_GETREADONLY) ||
-        sci(editor, SCI_GETCODEPAGE) != SC_CP_UTF8 || sci(editor, SCI_GETSELECTIONS) != 1 ||
-        sci(editor, SCI_GETSELECTIONMODE) != SC_SEL_STREAM ||
-        request.cursor != sci(editor, SCI_GETCURRENTPOS) || request.anchor != sci(editor, SCI_GETANCHOR) ||
-        request.text != readText(editor)) {
+    if (!requestIsCurrent(request)) {
         status(Text::Discarded); return;
     }
     if (!result->error.empty()) throw std::runtime_error(result->error);
-    if (!result->response.value("ok", false)) throw std::runtime_error(result->response.value("error", "Invalid bridge response."));
-    if (result->response.value("needsParser", false)) {
+    bool retry = false;
+    if (!result->response.value("ok", false)) {
+        auto error = result->response.value("error", "Invalid bridge response.");
+        if (!result->response.value("canChooseParser", false)) throw std::runtime_error(error);
+        status(Text::FormatFailed);
+        if (!offerParserRetry(error)) return;
+        if (!requestIsCurrent(request)) { status(Text::Discarded); return; }
+        retry = true;
+    }
+    if (retry || result->response.value("needsParser", false)) {
         status(Text::ChooseLanguage);
-        auto parser = chooseParser();
+        auto parser = chooseParser(!request.rememberChoice);
         if (parser.empty()) { status(Text::FormatCancelled); return; }
-        if (shuttingDown || request.generation != generation ||
-            request.bufferId != static_cast<UINT_PTR>(SendMessageW(host._nppHandle, NPPM_GETCURRENTBUFFERID, 0, 0))) {
+        if (!requestIsCurrent(request)) {
             status(Text::Discarded); return;
         }
-        documentParsers[request.bufferId] = std::move(parser);
-        formatDocument();
+        if (request.rememberChoice) documentParsers[request.bufferId] = {parser, request.document};
+        formatCurrentDocument(std::move(parser), false, request.rememberChoice);
         return;
     }
     if (result->response.value("ignored", false)) { status(Text::Ignored); return; }
@@ -455,7 +502,9 @@ void applyCompletion() {
     LRESULT firstLine = sci(editor, SCI_GETFIRSTVISIBLELINE), xOffset = sci(editor, SCI_GETXOFFSET);
     sci(editor, SCI_BEGINUNDOACTION);
     sci(editor, SCI_SETTARGETRANGE, 0, static_cast<LPARAM>(request.text.size()));
+    applyingDocument = request.document;
     sci(editor, SCI_REPLACETARGET, formatted.size(), reinterpret_cast<LPARAM>(formatted.data()));
+    applyingDocument = 0;
     sci(editor, SCI_ENDUNDOACTION);
     sci(editor, SCI_SETSEL, byteCursor, byteCursor);
     sci(editor, SCI_SETFIRSTVISIBLELINE, firstLine); sci(editor, SCI_SETXOFFSET, xOffset);
@@ -512,10 +561,11 @@ BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, LPVOID) {
 extern "C" __declspec(dllexport) BOOL isUnicode() { return TRUE; }
 extern "C" __declspec(dllexport) const wchar_t* getName() { return L"NppFormatter"; }
 extern "C" __declspec(dllexport) FuncItem* getFuncsArray(int* count) {
-    const wchar_t* names[]{tr(Text::Format), tr(Text::Settings), tr(Text::About)};
-    PFUNCPLUGINCMD callbacks[]{formatDocument, openSettings, about};
-    for (int i = 0; i < 3; ++i) { wcscpy_s(commands[i]._itemName, names[i]); commands[i]._pFunc = callbacks[i]; }
-    *count = 3; return commands;
+    // Append new commands to preserve existing Shortcut Mapper indices.
+    const wchar_t* names[]{tr(Text::Format), tr(Text::Settings), tr(Text::About), tr(Text::FormatAs)};
+    PFUNCPLUGINCMD callbacks[]{formatDocument, openSettings, about, formatWithLanguage};
+    for (size_t i = 0; i < std::size(commands); ++i) { wcscpy_s(commands[i]._itemName, names[i]); commands[i]._pFunc = callbacks[i]; }
+    *count = static_cast<int>(std::size(commands)); return commands;
 }
 extern "C" __declspec(dllexport) void setInfo(NppData data) {
     host = data;
@@ -551,6 +601,20 @@ extern "C" __declspec(dllexport) void beNotified(SCNotification* notification) {
         break;
     case SCN_MODIFIED:
         if (notification->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)) ++generation;
+        if ((notification->modificationType & SC_MOD_DELETETEXT) && notification->position == 0 &&
+            notification->length > 0 && !documentParsers.empty()) {
+            auto source = static_cast<HWND>(notification->nmhdr.hwndFrom);
+            if ((source == host._scintillaMainHandle || source == host._scintillaSecondHandle) &&
+                sci(source, SCI_GETLENGTH) == 0) {
+                auto document = sci(source, SCI_GETDOCPOINTER);
+                if (document != applyingDocument) {
+                    for (auto it = documentParsers.begin(); it != documentParsers.end();) {
+                        if (it->second.document == document) it = documentParsers.erase(it);
+                        else ++it;
+                    }
+                }
+            }
+        }
         break;
     case NPPN_BUFFERACTIVATED: case NPPN_FILEBEFORECLOSE: case NPPN_GLOBALMODIFIED:
     case NPPN_FILEBEFORESAVE: case NPPN_FILERENAMED: ++generation; break;
