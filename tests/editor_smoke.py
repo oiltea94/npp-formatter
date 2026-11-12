@@ -89,6 +89,21 @@ def window_title(window):
     return title.value
 
 
+def accessible_text(window):
+    # Task Dialog draws its body with DirectUI, which does not expose WM_GETTEXT.
+    script = f'''
+        $ErrorActionPreference = 'Stop'
+        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+        Add-Type -AssemblyName UIAutomationClient
+        $root = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]{window})
+        $elements = $root.FindAll([Windows.Automation.TreeScope]::Descendants,
+                                 [Windows.Automation.Condition]::TrueCondition)
+        foreach ($element in $elements) {{ $element.Current.Name }}
+    '''
+    return subprocess.check_output(['powershell', '-NoProfile', '-Command', script],
+                                   encoding='utf-8', timeout=15)
+
+
 def windows(pid):
     found = []
     @CALLBACK
@@ -351,7 +366,11 @@ def run(sandbox, architecture, language='en'):
             buffer = C.create_unicode_buffer(send(control, 14, 0, 0) + 1)
             send(control, 13, len(buffer), C.addressof(buffer))
             body.append(buffer.value)
-        assert labels['about_body'] in '\n'.join(body), body
+        about_text = accessible_text(about_dialog)
+        assert labels['about_body'] in about_text, about_text
+        homepage = 'https://github.com/oiltea94/npp-formatter'
+        links = [w for w in children(about_dialog) if window_class(w) == 'SysLink']
+        assert any(f'<a href="{homepage}">{homepage}</a>' in window_title(w) for w in links), body
         USER32.PostMessageW(about_dialog, 0x10, 0, 0)
         until(lambda: not USER32.IsWindow(about_dialog))
         print(f'PASS localization: {language} menu, settings, detection messages and About', flush=True)

@@ -23,6 +23,7 @@ enum class Text {
     NodeFilter, PrettierFilter, NodeFirst, DetectNode, DetectPrettier, Detected,
     DetectionFailed, DetectionTimerError, TimeoutError, NodePathError, PrettierPathError,
     CreateSettingsError, WriteSettingsError, ReplaceSettingsError, AboutBody,
+    ProjectHomepage, OpenHomepageError, AboutDialogError,
     Busy, Formatting, Discarded, Ignored, Unchanged, Formatted, FormatFailed, Count
 };
 
@@ -57,9 +58,14 @@ inline constexpr Translation translations[] = {
     {L"Could not create the settings file.", L"创建配置文件失败。", L"建立設定檔失敗。"},
     {L"Could not write settings.", L"写入配置失败。", L"寫入設定失敗。"},
     {L"Could not replace settings file.", L"替换配置文件失败。", L"取代設定檔失敗。"},
-    {L"NppFormatter 0.1.0 prototype\n\nRequires user-installed Node.js 18+ and Prettier 3.x.\nConfigure both paths in Settings. UTF-8 buffers, full-document formatting.\nAssign a shortcut through Notepad++ Shortcut Mapper.\n\nNo Node.js runtime or Prettier package is bundled.\n\nProject homepage:\nhttps://github.com/oiltea94/npp-formatter",
-     L"NppFormatter 0.1.0 原型版本\n\n需要自行安装 Node.js 18+ 和 Prettier 3.x。\n请在配置中选择或自动检测路径。支持 UTF-8 文档的全文格式化。\n可通过 Notepad++ 的快捷键管理设置快捷键。\n\n插件不捆绑 Node.js 运行时或 Prettier 包。\n\n项目主页：\nhttps://github.com/oiltea94/npp-formatter",
-     L"NppFormatter 0.1.0 原型版本\n\n需要自行安裝 Node.js 18+ 和 Prettier 3.x。\n請在設定中選擇或自動偵測路徑。支援 UTF-8 文件的全文格式化。\n可透過 Notepad++ 的快捷鍵管理設定快捷鍵。\n\n外掛不附帶 Node.js 執行環境或 Prettier 套件。\n\n專案首頁：\nhttps://github.com/oiltea94/npp-formatter"},
+    {L"NppFormatter 0.1.0 prototype\n\nRequires user-installed Node.js 18+ and Prettier 3.x.\nConfigure both paths in Settings. UTF-8 buffers, full-document formatting.\nAssign a shortcut through Notepad++ Shortcut Mapper.\n\nNo Node.js runtime or Prettier package is bundled.",
+     L"NppFormatter 0.1.0 原型版本\n\n需要自行安装 Node.js 18+ 和 Prettier 3.x。\n请在配置中选择或自动检测路径。支持 UTF-8 文档的全文格式化。\n可通过 Notepad++ 的快捷键管理设置快捷键。\n\n插件不捆绑 Node.js 运行时或 Prettier 包。",
+     L"NppFormatter 0.1.0 原型版本\n\n需要自行安裝 Node.js 18+ 和 Prettier 3.x。\n請在設定中選擇或自動偵測路徑。支援 UTF-8 文件的全文格式化。\n可透過 Notepad++ 的快捷鍵管理設定快捷鍵。\n\n外掛不附帶 Node.js 執行環境或 Prettier 套件。"},
+    {L"Project homepage:", L"项目主页：", L"專案首頁："},
+    {L"Could not open the project homepage. Copy this address into your browser:\nhttps://github.com/oiltea94/npp-formatter",
+     L"打开项目主页失败。请将此地址复制到浏览器：\nhttps://github.com/oiltea94/npp-formatter",
+     L"開啟專案首頁失敗。請將此網址複製到瀏覽器：\nhttps://github.com/oiltea94/npp-formatter"},
+    {L"Could not open the About dialog.", L"打开关于窗口失败。", L"開啟關於視窗失敗。"},
     {L"NppFormatter: formatting already in progress", L"NppFormatter：正在格式化，请稍候", L"NppFormatter：正在格式化，請稍候"},
     {L"NppFormatter: formatting...", L"NppFormatter：正在格式化...", L"NppFormatter：正在格式化..."},
     {L"NppFormatter: document changed; result discarded", L"NppFormatter：文档已变化，已丢弃结果", L"NppFormatter：文件已變更，已捨棄結果"},

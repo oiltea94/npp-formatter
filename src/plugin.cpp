@@ -1,5 +1,7 @@
 #include <windows.h>
 #include <commdlg.h>
+#include <commctrl.h>
+#include <shellapi.h>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -385,8 +387,30 @@ LRESULT CALLBACK timerProc(HWND window, UINT message, WPARAM w, LPARAM l) {
     }
     return DefWindowProcW(window, message, w, l);
 }
+constexpr wchar_t projectHomepage[] = L"https://github.com/oiltea94/npp-formatter";
+HRESULT CALLBACK aboutCallback(HWND dialog, UINT notification, WPARAM, LPARAM link, LONG_PTR) {
+    if (notification == TDN_HYPERLINK_CLICKED && link &&
+        wcscmp(reinterpret_cast<const wchar_t*>(link), projectHomepage) == 0) {
+        auto result = ShellExecuteW(dialog, L"open", projectHomepage, nullptr, nullptr, SW_SHOWNORMAL);
+        if (reinterpret_cast<INT_PTR>(result) <= 32)
+            MessageBoxW(dialog, tr(Text::OpenHomepageError), tr(Text::ErrorTitle), MB_OK | MB_ICONERROR);
+    }
+    return S_OK;
+}
 void about() {
-    MessageBoxW(host._nppHandle, tr(Text::AboutBody), tr(Text::AboutTitle), MB_OK);
+    std::wstring footer = std::wstring(tr(Text::ProjectHomepage)) + L"\n<a href=\"" +
+        projectHomepage + L"\">" + projectHomepage + L"</a>";
+    TASKDIALOGCONFIG dialog{};
+    dialog.cbSize = sizeof(dialog);
+    dialog.hwndParent = host._nppHandle;
+    dialog.dwFlags = TDF_ENABLE_HYPERLINKS | TDF_ALLOW_DIALOG_CANCELLATION | TDF_POSITION_RELATIVE_TO_WINDOW;
+    dialog.dwCommonButtons = TDCBF_OK_BUTTON;
+    dialog.pszWindowTitle = tr(Text::AboutTitle);
+    dialog.pszContent = tr(Text::AboutBody);
+    dialog.pszFooter = footer.c_str();
+    dialog.pfCallback = aboutCallback;
+    if (FAILED(TaskDialogIndirect(&dialog, nullptr, nullptr, nullptr)))
+        MessageBoxW(host._nppHandle, tr(Text::AboutDialogError), tr(Text::ErrorTitle), MB_OK | MB_ICONERROR);
 }
 void shutdown() {
     shuttingDown = true; cancelled = true;

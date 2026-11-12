@@ -76,7 +76,7 @@ def verify_dll(data, arch):
     missing = EXPORTS - pe.exports()
     if missing:
         raise ValueError(f'Missing plugin exports: {sorted(missing)}')
-    system = {'kernel32.dll', 'user32.dll', 'gdi32.dll', 'comdlg32.dll',
+    system = {'kernel32.dll', 'user32.dll', 'gdi32.dll', 'comdlg32.dll', 'comctl32.dll',
               'advapi32.dll', 'shell32.dll', 'ole32.dll', 'ucrtbase.dll', 'msvcrt.dll',
               'ntdll.dll', 'bcrypt.dll'}
     external = {name for name in pe.imports() if name not in system
