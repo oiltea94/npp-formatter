@@ -59,10 +59,33 @@ test('rejects invalid dependency paths rather than loading another installation'
   assert.match(result.error, /Prettier|prettier/);
 });
 
-test('requires a parser or saved file path', () => {
+test('requests a document language without a replacement when none is known', () => {
   const result = invoke({ parser: '' });
-  assert.equal(result.ok, false);
-  assert.match(result.error, /parser/i);
+  assert.equal(result.ok, true);
+  assert.equal(result.needsParser, true);
+  assert.equal(result.formatted, undefined);
+});
+
+test('detects valid JSON for a plain-text untitled document', () => {
+  const result = invoke({ parser: undefined, detectParser: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.formatted, '{ "中文": "😀", "a": 1 }\n');
+  assert.equal(result.needsParser, undefined);
+});
+
+test('ambiguous or invalid JSON prompts without changing the text', () => {
+  for (const text of ['', '{oops', 'const answer=42;', 'title: value']) {
+    const result = invoke({ text, parser: undefined, detectParser: true });
+    assert.equal(result.ok, true);
+    assert.equal(result.needsParser, true);
+    assert.equal(result.formatted, undefined);
+  }
+});
+
+test('an explicit document parser takes priority over content detection', () => {
+  const result = invoke({ text: 'const answer=42;', parser: 'babel', detectParser: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.formatted, 'const answer = 42;\n');
 });
 
 test('invalid JSON produces a machine-readable error', () => {

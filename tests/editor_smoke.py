@@ -41,6 +41,7 @@ SETTING_ERRORS = {
     'zh-CN': ('NppFormatter 错误', '超时时间必须为 1000 至 120000 毫秒。'),
     'zh-TW': ('NppFormatter 錯誤', '逾時時間必須為 1000 至 120000 毫秒。'),
 }
+PARSER_TITLES = {'en': 'Choose document language', 'zh-CN': '选择文档语言', 'zh-TW': '選擇文件語言'}
 USER32 = C.WinDLL('user32', use_last_error=True)
 KERNEL32 = C.WinDLL('kernel32', use_last_error=True)
 CALLBACK = C.WINFUNCTYPE(W.BOOL, W.HWND, W.LPARAM)
@@ -280,7 +281,8 @@ def run(sandbox, architecture, language='en'):
         assert title.value == labels['title'], title.value
         for identifier, key in ((201, 'browse'), (202, 'browse'), (203, 'detect'), (204, 'detect'), (1, 'save'), (2, 'cancel')):
             assert control_text(dialog, identifier) == labels[key]
-        for identifier in (301, 302, 303, 304):
+        assert not get_control(dialog, 103), 'Global untitled parser setting should be removed'
+        for identifier in (301, 302, 304):
             label = control_text(dialog, identifier)
             assert label
             if language != 'en':
@@ -337,6 +339,7 @@ def run(sandbox, architecture, language='en'):
         until(lambda: not USER32.IsWindow(dialog))
         saved = configparser.ConfigParser(interpolation=None)
         saved.read(ini_path, encoding='utf-16')
+        assert 'UntitledParser' not in saved['Formatter'], 'Legacy global parser was written back'
         assert os.path.samefile(saved['Formatter']['PrettierPath'], project_prettier), 'Saved Prettier path differs from detected package'
         assert os.path.samefile(saved['Formatter']['NodePath'], node), 'Saved Node path differs from detected executable'
         assert ini_path.with_suffix('.ini.bak').read_bytes() == before
@@ -347,7 +350,7 @@ def run(sandbox, architecture, language='en'):
             dialog = open_settings()
             set_control(dialog, 101, '')
             set_control(dialog, 102, 'unsaved path')
-            set_control(dialog, 103, 'typescript')
+            set_control(dialog, 104, '15000')
             USER32.PostMessageW(dialog, 0x111, 204, 0)
             until(lambda: labels['node_first'] in control_text(dialog, 105))
             USER32.PostMessageW(main_window, 0x111, 48011, 0)  # Notepad++ Preferences
@@ -383,7 +386,7 @@ def run(sandbox, architecture, language='en'):
                     bridge_file.write_bytes(original_bridge)
                 assert control_text(dialog, 105).startswith(translated['detected'])
                 assert control_text(dialog, 102) == 'unsaved path'
-                assert control_text(dialog, 103) == 'typescript'
+                assert control_text(dialog, 104) == '15000'
             # The General page containing the combo is a child of Preferences.
             preferences = USER32.GetParent(USER32.GetParent(combo))
             USER32.PostMessageW(preferences, 0x10, 0, 0)
@@ -464,7 +467,113 @@ def run(sandbox, architecture, language='en'):
         assert text(editor) == changed, 'Stale result overwrote the edit'
         print('PASS real editor: responsive during formatting; stale result discarded', flush=True)
         project_config.unlink()
-        report = {'architecture': architecture, 'language': language, 'checks': 8,
+        settings_before_parsers = ini_path.read_bytes()
+
+        def current_buffer():
+            return send(main_window, 2024 + 60, 0, 0)
+
+        def new_document(value, host_language=0):
+            old_buffer = current_buffer()
+            send(main_window, 0x111, 41001, 0)  # File > New
+            until(lambda: current_buffer() != old_buffer)
+            send(editor, 2037, 65001, 0)  # UTF-8
+            send(editor, 2031, 2, 0)  # LF
+            assert send(main_window, 2024 + 6, 0, host_language)
+            set_text(value)
+            return current_buffer()
+
+        def activate(buffer_id):
+            position = send(main_window, 2024 + 57, buffer_id, 0)
+            assert position >= 0
+            send(main_window, 2024 + 28, position >> 30, position & 0x3FFFFFFF)
+            until(lambda: current_buffer() == buffer_id)
+            send(editor, 2031, 2, 0)  # Reactivating a tab restores its stored EOL mode.
+
+        def format_to(expected_text):
+            USER32.PostMessageW(main_window, 0x111, command, 0)
+            until(lambda: text(editor) == expected_text)
+
+        def open_picker():
+            USER32.PostMessageW(main_window, 0x111, command, 0)
+            picker = until(lambda: next((w for w in windows(process.pid)
+                                        if window_class(w) == '#32770' and window_title(w) == PARSER_TITLES[language]), None))
+            assert control_text(picker, 1) == labels['format']
+            assert control_text(picker, 2) == labels['cancel']
+            assert not USER32.IsWindowEnabled(get_control(picker, 1)), 'Picker must require an explicit choice'
+            return picker
+
+        def choose(picker, name):
+            combo = get_control(picker, 401)
+            wanted = C.create_unicode_buffer(name)
+            index = send(combo, 0x158, -1, C.addressof(wanted))  # CB_FINDSTRINGEXACT
+            assert index >= 0, name
+            send(combo, 0x14E, index, 0)
+            send(picker, 0x111, (1 << 16) | 401, combo)  # CBN_SELCHANGE
+            assert USER32.IsWindowEnabled(get_control(picker, 1))
+            USER32.PostMessageW(picker, 0x111, 1, 0)
+            until(lambda: not USER32.IsWindow(picker))
+
+        new_document('{"a":1}')
+        format_to('{ "a": 1 }\n')
+        new_document('const answer=42;', 58)  # L_JAVASCRIPT
+        format_to('const answer = 42;\n')
+        new_document('const answer:number=42;', 85)  # L_TYPESCRIPT
+        format_to('const answer: number = 42;\n')
+        new_document('{"a":1}', 22)  # L_PYTHON must not be silently treated as JSON.
+        picker = open_picker()
+        USER32.PostMessageW(picker, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(picker))
+        assert text(editor) == '{"a":1}'
+        print('PASS untitled: automatic JSON and Notepad++ JavaScript/TypeScript language selection', flush=True)
+
+        first = new_document('const first=1;')
+        picker = open_picker()
+        USER32.PostMessageW(picker, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(picker))
+        assert text(editor) == 'const first=1;', 'Cancel changed the document'
+        picker = open_picker()
+        choose(picker, 'JavaScript / JSX')
+        until(lambda: text(editor) == 'const first = 1;\n')
+        set_text('const second=2;')
+        format_to('const second = 2;\n')
+
+        second = new_document('const third=3;')
+        picker = open_picker()  # Choice must not leak from the first document.
+        USER32.PostMessageW(picker, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(picker))
+        activate(first)
+        set_text('const fourth=4;')
+        format_to('const fourth = 4;\n')
+        assert send(main_window, 2024 + 6, 0, 85)  # Changing language clears the manual choice.
+        set_text('const fifth:number=5;')
+        format_to('const fifth: number = 5;\n')
+        assert send(main_window, 2024 + 6, 0, 0)
+        picker = open_picker()
+        USER32.PostMessageW(picker, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(picker))
+
+        # Closing a document must clear the choice even if Notepad++ reuses its buffer ID.
+        activate(second)
+        choose(open_picker(), 'JavaScript / JSX')
+        until(lambda: text(editor) == 'const third = 3;\n')
+        send(editor, 2014, 0, 0)  # Mark clean so closing does not show a save prompt.
+        send(main_window, 0x111, 41003, 0)  # File > Close
+        until(lambda: current_buffer() != second)
+        new_document('const fresh=6;')
+        picker = open_picker()
+        USER32.PostMessageW(picker, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(picker))
+        assert text(editor) == 'const fresh=6;'
+        choose(open_picker(), 'JavaScript / JSX')
+        until(lambda: text(editor) == 'const fresh = 6;\n')
+        set_text('{"saved":1}')
+        saved_path = str(sandbox / 'saved.json').encode('utf-16-le') + b'\0\0'
+        assert KERNEL32.WriteProcessMemory(handle, memory, C.c_char_p(saved_path), len(saved_path), None)
+        assert send(main_window, 2024 + 78, 0, memory)  # NPPM_SAVECURRENTFILEAS
+        format_to('{ "saved": 1 }\n')
+        assert ini_path.read_bytes() == settings_before_parsers, 'Document choice must not write global settings'
+        print('PASS untitled: localized picker, cancel, per-document memory, tab isolation, language change, close cleanup and saved-file inference', flush=True)
+        report = {'architecture': architecture, 'language': language, 'checks': 10,
                   'live_language_switch': language == 'en', 'result': 'PASS'}
         (ROOT / 'build' / architecture / f'editor-smoke-{language}.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     finally:

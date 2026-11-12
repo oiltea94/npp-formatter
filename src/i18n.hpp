@@ -19,11 +19,12 @@ inline Language fromNativeFileName(std::string filename) {
 
 enum class Text {
     Empty, Format, Settings, About, SettingsTitle, AboutTitle, ErrorTitle,
-    NodeLabel, PrettierLabel, ParserLabel, TimeoutLabel, Browse, Detect, Save, Cancel,
+    NodeLabel, PrettierLabel, TimeoutLabel, Browse, Detect, Save, Cancel,
     NodeFilter, PrettierFilter, NodeFirst, DetectNode, DetectPrettier, Detected,
     DetectionFailed, DetectionTimerError, TimeoutError, NodePathError, PrettierPathError,
     CreateSettingsError, WriteSettingsError, ReplaceSettingsError, AboutBody,
     ProjectHomepage, OpenHomepageError, AboutDialogError,
+    ParserTitle, ParserPrompt, ParserDialogError, ChooseLanguage, FormatCancelled,
     Busy, Formatting, Discarded, Ignored, Unchanged, Formatted, FormatFailed, Count
 };
 
@@ -38,7 +39,6 @@ inline constexpr Translation translations[] = {
     {L"NppFormatter error", L"NppFormatter 错误", L"NppFormatter 錯誤"},
     {L"Node.js executable (node.exe)", L"Node.js 可执行文件（node.exe）", L"Node.js 執行檔（node.exe）"},
     {L"Prettier 3.x package directory (browse to its package.json)", L"Prettier 3.x 包目录（浏览时选择 package.json）", L"Prettier 3.x 套件目錄（瀏覽時選擇 package.json）"},
-    {L"Untitled-document parser (e.g. json, babel, typescript, html, css, markdown)", L"未保存文档的解析器（如 json、babel、typescript、html、css、markdown）", L"未儲存文件的解析器（如 json、babel、typescript、html、css、markdown）"},
     {L"Timeout in milliseconds (1000 - 120000)", L"超时时间，毫秒（1000 - 120000）", L"逾時時間，毫秒（1000 - 120000）"},
     {L"Browse...", L"浏览...", L"瀏覽..."},
     {L"Auto-detect", L"自动检测", L"自動偵測"},
@@ -66,6 +66,13 @@ inline constexpr Translation translations[] = {
      L"打开项目主页失败。请将此地址复制到浏览器：\nhttps://github.com/oiltea94/npp-formatter",
      L"開啟專案首頁失敗。請將此網址複製到瀏覽器：\nhttps://github.com/oiltea94/npp-formatter"},
     {L"Could not open the About dialog.", L"打开关于窗口失败。", L"開啟關於視窗失敗。"},
+    {L"Choose document language", L"选择文档语言", L"選擇文件語言"},
+    {L"Choose a language for this document. Remembered until you close/save it or change its language.",
+     L"请选择此新建文档的语言。选择仅用于当前文档，关闭、保存或切换文档语言后清除。",
+     L"請選擇此新建文件的語言。選擇僅用於目前文件，關閉、儲存或切換文件語言後清除。"},
+    {L"Could not open the language picker.", L"打开语言选择窗口失败。", L"開啟語言選擇視窗失敗。"},
+    {L"NppFormatter: choose this document's language", L"NppFormatter：请选择当前文档的语言", L"NppFormatter：請選擇目前文件的語言"},
+    {L"NppFormatter: formatting cancelled", L"NppFormatter：已取消格式化", L"NppFormatter：已取消格式化"},
     {L"NppFormatter: formatting already in progress", L"NppFormatter：正在格式化，请稍候", L"NppFormatter：正在格式化，請稍候"},
     {L"NppFormatter: formatting...", L"NppFormatter：正在格式化...", L"NppFormatter：正在格式化..."},
     {L"NppFormatter: document changed; result discarded", L"NppFormatter：文档已变化，已丢弃结果", L"NppFormatter：文件已變更，已捨棄結果"},

@@ -1,6 +1,7 @@
 #include "bridge_process.hpp"
 #include "json.hpp"
 #include "i18n.hpp"
+#include "parser_selection.hpp"
 #include <filesystem>
 #include <iostream>
 
@@ -19,6 +20,13 @@ int wmain(int argc, wchar_t** argv) {
             for (auto language : {Language::English, Language::SimplifiedChinese, Language::TraditionalChinese})
                 check(*get(static_cast<Text>(key), language) != L'\0', "Missing translation");
         std::cout << "PASS host locale selection, English fallback and translation coverage\n";
+        for (auto [language, parser] : {std::pair{L_JAVASCRIPT, "babel"}, {L_JS_EMBEDDED, "babel"},
+             {L_TYPESCRIPT, "typescript"}, {L_JSON, "json"}, {L_JSON5, "json5"},
+             {L_HTML, "html"}, {L_CSS, "css"}, {L_YAML, "yaml"}})
+            check(std::string(formatter::parserForLanguage(language)) == parser, "Host parser mapping failed");
+        for (int language : {L_TEXT, L_PYTHON, L_XML, L_USER, L_EXTERNAL})
+            check(formatter::parserForLanguage(language) == nullptr, "Unsupported language was guessed");
+        std::cout << "PASS document-language parser mapping and unsupported-language fallback\n";
         if (argc != 3) throw std::runtime_error("Usage: process_test.exe node.exe fixture.cjs");
         std::atomic<bool> cancel{false};
         auto invoke = [&](const nlohmann::json& request, DWORD timeout = 5000) {

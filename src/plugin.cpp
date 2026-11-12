@@ -5,11 +5,13 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <unordered_map>
 #include "PluginInterface.h"
 #include "json.hpp"
 #include "bridge_process.hpp"
 #include "dependency_discovery.hpp"
 #include "i18n.hpp"
+#include "parser_selection.hpp"
 
 namespace fs = std::filesystem;
 using nlohmann::json;
@@ -26,8 +28,10 @@ std::thread worker;
 std::atomic<bool> cancelled{false}, finished{false};
 uint64_t generation = 0;
 bool shuttingDown = false;
-struct Settings { std::wstring node, prettier, parser = L"json"; DWORD timeoutMs = 10000; };
+struct Settings { std::wstring node, prettier; DWORD timeoutMs = 10000; };
 Settings settings;
+std::unordered_map<UINT_PTR, std::string> documentParsers;
+bool choosingParser = false;
 struct Request {
     HWND editor;
     UINT_PTR bufferId;
@@ -76,7 +80,6 @@ std::wstring readSetting(const wchar_t* key, const wchar_t* fallback) {
 void loadSettings() {
     settings.node = readSetting(L"NodePath", L"");
     settings.prettier = readSetting(L"PrettierPath", L"");
-    settings.parser = readSetting(L"UntitledParser", L"json");
     settings.timeoutMs = GetPrivateProfileIntW(L"Formatter", L"TimeoutMs", 10000, configPath.c_str());
     if (settings.timeoutMs < 1000 || settings.timeoutMs > 120000) settings.timeoutMs = 10000;
 }
@@ -91,7 +94,7 @@ void saveSettings(const Settings& next) {
             throw std::runtime_error(utf8(tr(Text::WriteSettingsError)));
     };
     write(L"NodePath", next.node); write(L"PrettierPath", next.prettier);
-    write(L"UntitledParser", next.parser); write(L"TimeoutMs", std::to_wstring(next.timeoutMs));
+    write(L"TimeoutMs", std::to_wstring(next.timeoutMs));
     WritePrivateProfileStringW(nullptr, nullptr, nullptr, temporary.c_str());
     if (fs::exists(configPath)) {
         fs::path backup = configPath; backup += L".bak";
@@ -130,7 +133,7 @@ void setDetectionStatus(HWND window, Text key, const std::wstring& details = {})
 void updateSettingsLanguage(HWND window) {
     SetWindowTextW(window, tr(Text::SettingsTitle));
     const std::pair<int, Text> controls[] = {
-        {301, Text::NodeLabel}, {302, Text::PrettierLabel}, {303, Text::ParserLabel}, {304, Text::TimeoutLabel},
+        {301, Text::NodeLabel}, {302, Text::PrettierLabel}, {304, Text::TimeoutLabel},
         {201, Text::Browse}, {202, Text::Browse}, {203, Text::Detect}, {204, Text::Detect},
         {IDOK, Text::Save}, {IDCANCEL, Text::Cancel}
     };
@@ -227,13 +230,11 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
             addControl(window, L"EDIT", settings.prettier.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 104, 480, 26, 102);
             addControl(window, L"BUTTON", tr(Text::Browse), WS_TABSTOP, 504, 104, 96, 26, 202);
             addControl(window, L"BUTTON", tr(Text::Detect), WS_TABSTOP, 608, 104, 100, 26, 204);
-            addControl(window, L"STATIC", tr(Text::ParserLabel), 0, 16, 144, 692, 20, 303);
-            addControl(window, L"EDIT", settings.parser.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 168, 584, 26, 103);
-            addControl(window, L"STATIC", tr(Text::TimeoutLabel), 0, 16, 208, 420, 20, 304);
-            addControl(window, L"EDIT", std::to_wstring(settings.timeoutMs).c_str(), WS_TABSTOP | ES_NUMBER, 450, 204, 150, 26, 104);
-            addControl(window, L"STATIC", L"", 0, 16, 244, 692, 44, 105);
-            addControl(window, L"BUTTON", tr(Text::Save), WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 300, 100, 30, IDOK);
-            addControl(window, L"BUTTON", tr(Text::Cancel), WS_TABSTOP, 608, 300, 100, 30, IDCANCEL);
+            addControl(window, L"STATIC", tr(Text::TimeoutLabel), 0, 16, 144, 420, 20, 304);
+            addControl(window, L"EDIT", std::to_wstring(settings.timeoutMs).c_str(), WS_TABSTOP | ES_NUMBER, 450, 140, 150, 26, 104);
+            addControl(window, L"STATIC", L"", 0, 16, 180, 692, 44, 105);
+            addControl(window, L"BUTTON", tr(Text::Save), WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 236, 100, 30, IDOK);
+            addControl(window, L"BUTTON", tr(Text::Cancel), WS_TABSTOP, 608, 236, 100, 30, IDCANCEL);
             setDetectionStatus(window, Text::Empty);
             SendMessageW(host._nppHandle, NPPM_MODELESSDIALOG, MODELESSDIALOGADD, reinterpret_cast<LPARAM>(window));
             return 0;
@@ -257,7 +258,6 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
             if (id == IDOK) {
                 Settings next;
                 next.node = controlText(window, 101); next.prettier = controlText(window, 102);
-                next.parser = controlText(window, 103);
                 std::wstring timeout = controlText(window, 104);
                 size_t end = 0;
                 unsigned long value;
@@ -285,14 +285,9 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
     } catch (const std::exception& error) { showError(error.what()); return 0; }
     return DefWindowProcW(window, message, w, l);
 }
-void openSettings() {
-    if (settingsWindow) { SetForegroundWindow(settingsWindow); return; }
-    settingsWindow = CreateWindowExW(WS_EX_CONTROLPARENT, L"NppFormatterSettings", tr(Text::SettingsTitle),
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, 740, 380, host._nppHandle, nullptr, instance, nullptr);
-    if (!settingsWindow) return;
+void centerOnHost(HWND target) {
     RECT owner{}, window{};
-    if (GetWindowRect(host._nppHandle, &owner) && GetWindowRect(settingsWindow, &window)) {
+    if (GetWindowRect(host._nppHandle, &owner) && GetWindowRect(target, &window)) {
         LONG width = window.right - window.left, height = window.bottom - window.top;
         LONG x = owner.left + (owner.right - owner.left - width) / 2;
         LONG y = owner.top + (owner.bottom - owner.top - height) / 2;
@@ -303,9 +298,61 @@ void openSettings() {
             x = std::clamp(x, work.left, std::max(work.left, work.right - width));
             y = std::clamp(y, work.top, std::max(work.top, work.bottom - height));
         }
-        SetWindowPos(settingsWindow, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(target, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
+}
+void openSettings() {
+    if (settingsWindow) { SetForegroundWindow(settingsWindow); return; }
+    settingsWindow = CreateWindowExW(WS_EX_CONTROLPARENT, L"NppFormatterSettings", tr(Text::SettingsTitle),
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+        CW_USEDEFAULT, CW_USEDEFAULT, 740, 316, host._nppHandle, nullptr, instance, nullptr);
+    if (!settingsWindow) return;
+    centerOnHost(settingsWindow);
     ShowWindow(settingsWindow, SW_SHOW);
+}
+INT_PTR CALLBACK parserDialogProc(HWND window, UINT message, WPARAM w, LPARAM) {
+    if (message == WM_INITDIALOG) {
+        SetWindowTextW(window, tr(Text::ParserTitle));
+        SetWindowPos(window, nullptr, 0, 0, 550, 205, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        addControl(window, L"STATIC", tr(Text::ParserPrompt), 0, 16, 16, 510, 44, 402);
+        addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST,
+                   16, 64, 510, 280, 401);
+        for (const auto& choice : formatter::parserChoices)
+            SendDlgItemMessageW(window, 401, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(choice.label));
+        addControl(window, L"BUTTON", tr(Text::Format), WS_TABSTOP | BS_DEFPUSHBUTTON, 280, 120, 130, 30, IDOK);
+        addControl(window, L"BUTTON", tr(Text::Cancel), WS_TABSTOP, 422, 120, 104, 30, IDCANCEL);
+        EnableWindow(GetDlgItem(window, IDOK), FALSE);
+        centerOnHost(window);
+        return TRUE;
+    }
+    if (message == WM_COMMAND) {
+        if (LOWORD(w) == 401 && HIWORD(w) == CBN_SELCHANGE) {
+            EnableWindow(GetDlgItem(window, IDOK), TRUE);
+            return TRUE;
+        }
+        if (LOWORD(w) == IDOK) {
+            auto selected = SendDlgItemMessageW(window, 401, CB_GETCURSEL, 0, 0);
+            if (selected != CB_ERR) EndDialog(window, selected + 1);
+            return TRUE;
+        }
+        if (LOWORD(w) == IDCANCEL) { EndDialog(window, 0); return TRUE; }
+    }
+    if (message == WM_CLOSE) { EndDialog(window, 0); return TRUE; }
+    return FALSE;
+}
+std::string chooseParser() {
+    struct alignas(DWORD) EmptyDialog {
+        DLGTEMPLATE dialog{};
+        WORD menu = 0, windowClass = 0, title = 0;
+    } layout;
+    layout.dialog.style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME;
+    layout.dialog.cx = 280; layout.dialog.cy = 105;
+    choosingParser = true;
+    auto selected = DialogBoxIndirectParamW(instance, &layout.dialog, host._nppHandle, parserDialogProc, 0);
+    choosingParser = false;
+    if (selected == -1) throw std::runtime_error(utf8(tr(Text::ParserDialogError)));
+    if (selected <= 0 || static_cast<size_t>(selected) > std::size(formatter::parserChoices)) return {};
+    return formatter::parserChoices[selected - 1].parser;
 }
 HWND currentEditor() {
     int view = 0;
@@ -323,7 +370,7 @@ std::string readText(HWND editor) {
 void formatDocument() {
     try {
         if (shuttingDown) return;
-        if (worker.joinable()) { status(Text::Busy); return; }
+        if (worker.joinable() || choosingParser) { status(Text::Busy); return; }
         loadSettings();
         if (settings.node.empty() || settings.prettier.empty()) { openSettings(); return; }
         HWND editor = currentEditor();
@@ -342,7 +389,14 @@ void formatDocument() {
         json payload{{"text", request.text}, {"cursorOffset", wide(request.text.substr(0, request.cursor)).size()},
             {"prettierPath", utf8(settings.prettier)}, {"endOfLine", sci(editor, SCI_GETEOLMODE) == SC_EOL_CRLF ? "crlf" : "lf"}};
         if (fs::path(filename).is_absolute()) payload["filePath"] = utf8(filename);
-        else payload["parser"] = utf8(settings.parser);
+        else {
+            int language = L_TEXT;
+            SendMessageW(host._nppHandle, NPPM_GETCURRENTLANGTYPE, 0, reinterpret_cast<LPARAM>(&language));
+            if (auto parser = formatter::parserForLanguage(language)) payload["parser"] = parser;
+            else if (auto selected = documentParsers.find(request.bufferId); selected != documentParsers.end())
+                payload["parser"] = selected->second;
+            else payload["detectParser"] = language == L_TEXT;
+        }
         request.payload = payload.dump();
         completion.reset(); cancelled = false; finished = false;
         Settings chosen = settings;
@@ -379,6 +433,18 @@ void applyCompletion() {
     }
     if (!result->error.empty()) throw std::runtime_error(result->error);
     if (!result->response.value("ok", false)) throw std::runtime_error(result->response.value("error", "Invalid bridge response."));
+    if (result->response.value("needsParser", false)) {
+        status(Text::ChooseLanguage);
+        auto parser = chooseParser();
+        if (parser.empty()) { status(Text::FormatCancelled); return; }
+        if (shuttingDown || request.generation != generation ||
+            request.bufferId != static_cast<UINT_PTR>(SendMessageW(host._nppHandle, NPPM_GETCURRENTBUFFERID, 0, 0))) {
+            status(Text::Discarded); return;
+        }
+        documentParsers[request.bufferId] = std::move(parser);
+        formatDocument();
+        return;
+    }
     if (result->response.value("ignored", false)) { status(Text::Ignored); return; }
     auto formatted = result->response.at("formatted").get<std::string>();
     auto textWide = wide(formatted);
@@ -479,6 +545,10 @@ extern "C" __declspec(dllexport) void setInfo(NppData data) {
 extern "C" __declspec(dllexport) void beNotified(SCNotification* notification) {
     switch (notification->nmhdr.code) {
     case NPPN_READY: case NPPN_NATIVELANGCHANGED: refreshLanguage(); break;
+    case NPPN_FILECLOSED: case NPPN_FILESAVED: case NPPN_LANGCHANGED:
+        documentParsers.erase(notification->nmhdr.idFrom);
+        ++generation;
+        break;
     case SCN_MODIFIED:
         if (notification->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)) ++generation;
         break;

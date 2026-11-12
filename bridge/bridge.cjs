@@ -107,8 +107,13 @@ async function run(request) {
   if (filePath !== undefined && (typeof filePath !== 'string' || !path.isAbsolute(filePath))) {
     throw new Error('filePath must be absolute.');
   }
-  if (!filePath && !request.parser) {
-    throw new Error('Select an untitled-document parser in Settings, or save the document first.');
+  let parser = request.parser;
+  if (!filePath && !parser) {
+    if (request.detectParser === true) {
+      try { JSON.parse(request.text); parser = 'json'; }
+      catch { /* Ambiguous content requires a document-specific choice. */ }
+    }
+    if (!parser) return { ok: true, needsParser: true };
   }
   if (filePath) process.chdir(path.dirname(filePath));
   const config = filePath ? await prettier.resolveConfig(filePath, { editorconfig: true }) : null;
@@ -128,7 +133,7 @@ async function run(request) {
     endOfLine: request.endOfLine ?? 'auto', ...config, plugins,
     filepath: filePath, cursorOffset: request.cursorOffset,
   };
-  if (request.parser) options.parser = request.parser;
+  if (parser) options.parser = parser;
   const result = await prettier.formatWithCursor(request.text, options);
   return { ok: true, ...result, version: prettier.version, configFile };
 }

@@ -152,7 +152,6 @@ Join-Path (npm root -g) 'prettier'
 |---|---|
 | Node.js executable | Absolute path to `node.exe` |
 | Prettier package directory | Absolute directory containing Prettier's `package.json`; Browse selects that file and fills in its directory |
-| Untitled-document parser | Parser for unsaved documents; defaults to `json` |
 | Timeout in milliseconds | Defaults to `10000` (10 seconds); accepts `1000`–`120000` |
 
 Click **Save**. Select the package directory itself, not its `bin` directory or a `prettier.cmd` launcher.
@@ -179,11 +178,12 @@ Select **Plugins → NppFormatter → Format document**. To assign a shortcut, l
 | Menu command | Behavior |
 |---|---|
 | Format document | Format the entire current buffer, including unsaved edits |
-| Settings... | Configure dependency paths, the untitled-document parser, and timeout |
+| Settings... | Configure dependency paths and timeout |
 | About | Show the plugin version and runtime requirements |
 
 - **Saved documents:** the file path is passed to Prettier for parser inference and configuration lookup. Common built-in formats include JavaScript, TypeScript, JSON, HTML, CSS, Markdown, and YAML.
-- **Untitled documents:** choose a parser such as `json`, `babel`, `typescript`, `html`, `css`, `markdown`, or `yaml` in Settings. These documents have no project path for configuration lookup.
+- **Untitled documents:** the formatter follows the document language selected in Notepad++ for JavaScript, TypeScript, JSON, JSON5, HTML, CSS, and YAML. For plain text, valid JSON is detected automatically in the background. Otherwise, a language picker appears when you format; its choice is remembered only for that document during the current session. Closing or saving the document, or changing its language in Notepad++, clears the choice. Cancel leaves the text unchanged. These documents have no project path for configuration lookup.
+- **Existing settings:** the old global `UntitledParser` value is ignored and removed the next time settings are saved; dependency paths and timeout are retained. To correct a document's remembered choice, select its language in Notepad++ (or switch to another language and back to plain text to choose again).
 - **Selections:** the command still formats the whole document. After replacement, an ordinary selection collapses to the mapped caret. Multiple carets and rectangular selections are not supported in this prototype.
 - **While formatting:** editing, switching documents, saving, or changing the caret/selection can cause the pending result to be discarded. Run the command again once you are ready.
 - **Failures:** syntax errors, missing dependencies, and timeouts leave the original text intact. The status bar reports progress, ignored files, unchanged output, and discarded results.
@@ -212,7 +212,7 @@ Files matching the ignore rules are skipped. The document's LF or CRLF setting i
 | Formatting opens Settings | Configure both dependency paths before the first request |
 | Node.js does not start | Use the actual absolute `node.exe` path returned by `process.execPath` |
 | Prettier cannot be loaded | Select a Prettier 3.x package directory containing `package.json`, not `prettier.cmd` |
-| An untitled document gives a syntax error | Choose the correct parser or save it with a suitable extension |
+| An untitled document gives a syntax error | Check its language in Notepad++; change the language to clear a remembered choice, or save it with a suitable extension |
 | A saved file gives a parser or syntax error | Check its extension, contents, and project configuration |
 | A file is skipped or a result is discarded | Check `.prettierignore`; rerun formatting after editing or switching documents |
 | Formatting times out | Inspect project config/plugins and increase the timeout if needed |

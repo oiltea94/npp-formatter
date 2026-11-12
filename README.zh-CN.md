@@ -152,7 +152,6 @@ Join-Path (npm root -g) 'prettier'
 |---|---|
 | Node.js executable | `node.exe` 的绝对路径 |
 | Prettier package directory | 包含 Prettier `package.json` 的绝对目录；Browse 选择该文件后会自动填入所在目录 |
-| Untitled-document parser | 未保存文档使用的解析器，默认 `json` |
 | Timeout in milliseconds | 默认 `10000` 毫秒（10 秒），允许范围为 `1000`–`120000` |
 
 点击 **Save** 保存。Prettier 路径应指向包本身的目录，避免选成 `bin` 目录或 `prettier.cmd` 启动脚本。
@@ -179,11 +178,12 @@ Join-Path (npm root -g) 'prettier'
 | 菜单命令 | 作用 |
 |---|---|
 | Format document | 格式化当前缓冲区全文，包含尚未保存的修改 |
-| Settings... | 配置依赖路径、未保存文档的解析器和超时时间 |
+| Settings... | 配置依赖路径和超时时间 |
 | About | 查看插件版本和运行要求 |
 
 - **已保存文档**：将文件路径传给 Prettier，用于推断解析器和查找配置。常见内置格式包括 JavaScript、TypeScript、JSON、HTML、CSS、Markdown 和 YAML。
-- **未保存文档**：在 Settings 中选择 `json`、`babel`、`typescript`、`html`、`css`、`markdown` 或 `yaml` 等解析器。此类文档没有用于查找项目配置的文件路径。
+- **新建且尚未保存的文档**：优先跟随 Notepad++ 中选择的文档语言，支持 JavaScript、TypeScript、JSON、JSON5、HTML、CSS 和 YAML。纯文本中的有效 JSON 会在后台自动识别；其他情况在格式化时弹出语言选择窗口，选择仅在本次会话中为当前文档记住。关闭、保存文档或切换 Notepad++ 文档语言后清除选择；取消选择保留原文。此类文档没有用于查找项目配置的文件路径。
+- **已有配置**：旧的全局 `UntitledParser` 值不再使用，下次保存配置时移除；依赖路径与超时时间保留。如果当前文档记住了错误的选择，可在 Notepad++ 中选择正确语言，或切换到其他语言后再切回普通文本以重新选择。
 - **选区处理**：命令仍会格式化全文；成功替换后，普通选区收拢到映射后的光标位置。原型暂不处理多光标和矩形选区。
 - **格式化期间**：修改内容、切换文档、保存，或改变光标与选区，都可能使待返回结果被丢弃。停止这些操作后重新执行即可。
 - **错误处理**：语法错误、依赖缺失或超时均保留原文。状态栏显示执行进度、忽略文件、内容未变化和结果被丢弃等状态。
@@ -212,7 +212,7 @@ Join-Path (npm root -g) 'prettier'
 | 点击格式化后打开 Settings | 首次使用前需要配置两项依赖路径 |
 | Node.js 启动失败 | 使用 `process.execPath` 返回的实际 `node.exe` 绝对路径 |
 | Prettier 加载失败 | 选择包含 `package.json` 的 Prettier 3.x 包目录，避免选成 `prettier.cmd` |
-| 未保存文档出现语法错误 | 选择正确的解析器，或用适当扩展名保存文件 |
+| 未保存文档出现语法错误 | 检查 Notepad++ 文档语言；切换语言可清除已记住的选择，也可用适当扩展名保存文件 |
 | 已保存文件出现解析器或语法错误 | 检查扩展名、文件内容和项目配置 |
 | 文件被跳过，或结果被丢弃 | 检查 `.prettierignore`；停止编辑或切换文档后重新格式化 |
 | 格式化超时 | 检查项目配置和插件，按需增大超时时间 |
