@@ -5,7 +5,7 @@
 <p align="center"><a href="README.md">English</a> · <strong>简体中文</strong></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Windows-x64-0078D4" alt="Windows x64">
+  <img src="https://img.shields.io/badge/Windows-x86%20%7C%20x64%20%7C%20ARM64-0078D4" alt="Windows x86、x64 和 ARM64">
   <img src="https://img.shields.io/badge/status-0.1.0%20prototype-orange" alt="0.1.0 原型版本">
   <img src="https://img.shields.io/badge/current%20adapter-Prettier%203.x-F7B93E" alt="当前原型已接入：Prettier 3.x">
 </p>
@@ -20,7 +20,7 @@
 
 NppFormatter 的设计参考 [Sublime Text 的 Formatter](https://packages.sublimetext.com/packages/Formatter)，目标是在一个可配置的 Notepad++ 插件中接入多种格式化和文本转换工具。本项目独立开发，Prettier 是第一个接入的工具。
 
-> **当前已实现：** 0.1.0 是通过 Prettier 格式化全文的 x64 原型。其他工具适配器、通用工具配置、文本转换和工具串联属于后续计划，尚未实现。下面的安装与使用说明对应当前可运行的 Prettier 原型。
+> **当前已实现：** 0.1.0 是通过 Prettier 格式化全文的原型，提供 x86、x64 和 ARM64 构建。其他工具适配器、通用工具配置、文本转换和工具串联属于后续计划，尚未实现。下面的安装与使用说明对应当前可运行的 Prettier 原型。
 
 ### 当前功能
 
@@ -66,12 +66,18 @@ function greet(name) {
 
 | 组件 | 要求 |
 |---|---|
-| 编辑器 | Windows 下的 **Notepad++ x64** |
+| 编辑器 | Windows 下的 **Notepad++ x86、x64 或 ARM64** |
 | Node.js | 用户自行安装 **18 或以上版本** |
 | Prettier | 用户自行安装 **3.x** |
 | 文档 | UTF-8 编辑缓冲区，最多 **8 MiB**，使用单个普通光标或选区 |
 
-插件架构须匹配 **Notepad++**，不能只根据 Windows 架构选择。当前构建目标为 x64，未包含 x86 或 ARM64 安装包；不同编辑器和依赖版本的兼容性仍需扩大验证。
+插件架构须匹配 **Notepad++**，不能只根据 Windows 架构选择。例如，64 位 Windows 上运行的 32 位 Notepad++ 应选择 x86 包。Node.js 在独立进程中运行，只需兼容当前 Windows，无需与插件架构一致。不同编辑器和依赖版本的兼容性仍需扩大验证。
+
+| Notepad++ 架构 | 安装包 |
+|---|---|
+| x86（32 位） | `NppFormatter-0.1.0-x86.zip` |
+| x64（64 位） | `NppFormatter-0.1.0-x64.zip` |
+| ARM64 | `NppFormatter-0.1.0-arm64.zip` |
 
 ## 安装
 
@@ -95,7 +101,7 @@ npm install --global prettier@3
 
 ### 2. 安装插件
 
-1. 准备 `NppFormatter-0.1.0-x64.zip`。从本仓库构建后，安装包位于 `dist/`；参见[从源码构建](#从源码构建)。
+1. 按上表选择与 Notepad++ 架构一致的 ZIP。从本仓库构建后，安装包位于 `dist/`；参见[从源码构建](#从源码构建)。
 2. 关闭 Notepad++。升级已有版本时，先将 `plugins/NppFormatter` 文件夹改名备份。
 3. 解压 ZIP，将其中的 `NppFormatter` 文件夹复制到 Notepad++ 的 `plugins` 目录。
 4. 重启 Notepad++，打开 **插件 → NppFormatter → Settings...**。
@@ -178,7 +184,7 @@ Join-Path (npm root -g) 'prettier'
 
 | 现象 | 检查方法 |
 |---|---|
-| 插件菜单中没有 NppFormatter | 确认使用 x64 Notepad++，检查 DLL 目录结构，并重启编辑器 |
+| 插件菜单中没有 NppFormatter | 确认 DLL 架构与 Notepad++ 一致，检查目录结构，并重启编辑器 |
 | 点击格式化后打开 Settings | 首次使用前需要配置两项依赖路径 |
 | Node.js 启动失败 | 使用 `process.execPath` 返回的实际 `node.exe` 绝对路径 |
 | Prettier 加载失败 | 选择包含 `package.json` 的 Prettier 3.x 包目录，避免选成 `prettier.cmd` |
@@ -199,26 +205,33 @@ Join-Path (npm root -g) 'prettier'
 
 ## 从源码构建
 
-构建工具：**Zig 0.14.1**、Node.js、npm 和 Windows PowerShell。请将 `zig` 加入 `PATH`；只有编辑器冒烟测试需要 Python。
+构建工具：**LLVM-MinGW 20261104（UCRT）**、Node.js、npm、**Python 3.12+** 和 PowerShell。固定版本编译器运行于 Windows x64，或通过 x64 模拟运行于 Windows 11 ARM64，可交叉编译全部三种目标架构，替代原先仅使用 Zig 的构建方式。
 
 在仓库根目录执行：
 
 ```powershell
 npm ci
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
+python scripts/bootstrap.py
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architecture all
 ```
 
-构建脚本按 `-Zig` 参数、`ZIG_EXE` 环境变量、`PATH` 的顺序查找编译器。具体安装路径在使用环境中配置，无需写入项目文档。
+引导脚本下载固定版本编译器，并在解压前校验 SHA-256。已有 LLVM-MinGW 时，可通过 `-Toolchain` 参数或 `LLVM_MINGW_ROOT` 环境变量指定其根目录。`-Architecture` 接受 `x86`、`x64`（默认）、`arm64` 或 `all`。
 
-构建脚本运行桥接测试和原生进程测试，然后生成 `dist/NppFormatter-0.1.0-x64.zip`。安装包仅包含 DLL、桥接脚本、中英文 README 和第三方许可说明；Node.js、Prettier、测试和构建工具不会打包。`npm ci` 安装的 Prettier 仅作为开发测试依赖。
+构建脚本运行桥接测试，并在宿主可执行目标程序时运行原生进程测试。x64 Windows 会明确跳过 ARM64 运行测试；交叉编译成功不等于运行验证通过。`-SkipTests` 跳过桥接与原生测试，但始终校验安装包。每个 ZIP 均检查 PE 架构、六个 Notepad++ 导出函数、仅依赖系统 DLL，以及完整文件清单和内容。构建与暂存目录分别为 `build/<arch>` 和 `dist/<arch>/NppFormatter`，ZIP 与 SHA-256 校验文件输出到 `dist/`。
+
+安装包仅包含 DLL、桥接脚本、中英文 README 和第三方许可说明；Node.js、Prettier、测试和构建工具不会打包。`npm ci` 安装的 Prettier 仅作为开发测试依赖。
 
 | 命令 | 用途 |
 |---|---|
 | `npm test` | 使用真实 Prettier 验证格式化、配置、忽略规则、Unicode 光标偏移和错误返回 |
 | `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1` | 构建 x64、运行桥接及原生测试并打包 |
-| `python tests/editor_smoke.py` | 在独立 Notepad++ 副本中测试已构建的插件 |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architecture all` | 构建并打包 x86、x64 和 ARM64 |
+| `python -m unittest discover -s tests -p test_artifacts.py` | 构建后验证错误架构、缺失导出、多余文件和过期 ZIP 内容会被拒绝 |
+| `python tests/editor_smoke.py --arch x64` | 在独立 Notepad++ 副本中测试指定架构 |
 
-冒烟测试通过 `NPP_EXE`、`PATH` 或标准安装位置查找 Notepad++，在自动清理的临时目录中运行独立副本，检查格式化、光标映射、撤销、无变化时的行为和过期结果保护。测试结果摘要不记录本机路径。
+冒烟测试通过 `NPP_EXE`、`PATH` 或标准安装位置查找 Notepad++，启动前核对架构，在自动清理的临时目录中运行独立副本，检查格式化、光标映射、撤销、无变化时的行为和过期结果保护。测试结果摘要不记录本机路径。测试 x64/ARM64 编辑器时使用 64 位 Python。
+
+CI 在 `windows-latest` 上构建 x86 和 x64，在 `windows-11-arm` 上构建 ARM64。各任务运行原生进程测试与对应架构的便携编辑器测试，通过后上传 ZIP 和校验文件。测试编辑器固定为 Notepad++ 8.9.6，下载后校验 SHA-256。配置工作流不代表测试已通过，请查看各架构实际运行结果；工作流不会自动发布 Release。
 
 代码分为 `src/`（原生插件与进程管理）、`bridge/`（Prettier 集成）和 `tests/`。原型每次请求启动一个 Node.js 进程，同一时间只执行一个格式化请求。
 
@@ -232,7 +245,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
 4. **编辑器工作流**：增加选区格式化与保存时格式化，按工具能力启用，并沿用撤销和过期结果保护。
 5. **文本转换与工具串联**：扩展压缩、转换和多个工具顺序执行；所有步骤成功后，才以一次可撤销操作写入最终结果。
 
-进程复用、更多架构与编码，以及书签和折叠位置的改善留待后续。目标架构与当前原型的验收条件见源码目录中的 `docs/SPEC.md`。
+进程复用、更多编码，以及书签和折叠位置的改善留待后续。目标架构与当前原型的验收条件见源码目录中的 `docs/SPEC.md`。
 
 反馈问题时，请附上插件、Notepad++、Node.js 和 Prettier 版本，最小输入样例、相关配置、预期结果，以及完整的错误或状态消息。修改代码时运行相关测试，并同步维护两份 README。
 

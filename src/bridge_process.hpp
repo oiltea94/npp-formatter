@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <windows.h>
 #include <atomic>
 #include <stdexcept>

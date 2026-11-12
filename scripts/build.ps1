@@ -1,52 +1,70 @@
-param([string]$Zig = '', [switch]$SkipTests)
+param(
+    [ValidateSet('x86', 'x64', 'arm64', 'all')][string]$Architecture = 'x64',
+    [string]$Toolchain = '',
+    [switch]$SkipTests,
+    [switch]$RequireRuntimeTests
+)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location $root
 try {
-    if (-not $Zig) { $Zig = $env:ZIG_EXE }
-    if (-not $Zig) {
-        $zigCommand = Get-Command zig -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($zigCommand) { $Zig = $zigCommand.Source }
-    }
-    if (-not $Zig -or -not (Test-Path -LiteralPath $Zig -PathType Leaf)) {
-        throw 'Install Zig 0.14.1 on PATH, set ZIG_EXE, or pass -Zig with its executable path.'
-    }
-    $Zig = (Resolve-Path -LiteralPath $Zig).Path
-    New-Item -ItemType Directory -Force -Path 'build','dist\NppFormatter\licenses' | Out-Null
-    $flags = @('-target','x86_64-windows-gnu','-std=c++17','-O2','-DUNICODE','-D_UNICODE','-DNOMINMAX','-Wall','-Wextra','-Isrc','-Ithird_party/npp','-Ithird_party/json')
-    & $Zig c++ @flags -shared -static 'src/plugin.cpp' -o 'build/NppFormatter.dll' -lcomdlg32 -luser32 -lgdi32
-    if ($LASTEXITCODE -ne 0) { throw 'Plugin build failed.' }
-    & $Zig c++ @flags -municode 'tests/process_test.cpp' -o 'build/process_test.exe'
-    if ($LASTEXITCODE -ne 0) { throw 'Process test build failed.' }
+    if ($SkipTests -and $RequireRuntimeTests) { throw '-SkipTests conflicts with -RequireRuntimeTests.' }
+    if (-not $Toolchain) { $Toolchain = $env:LLVM_MINGW_ROOT }
+    if (-not $Toolchain) { $Toolchain = Join-Path $root '.tools\llvm-mingw-20261104-ucrt-x86_64' }
+    $targets = @{ x86 = 'i686'; x64 = 'x86_64'; arm64 = 'aarch64' }
+    $architectures = if ($Architecture -eq 'all') { @('x86', 'x64', 'arm64') } else { @($Architecture) }
+    $version = (Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json).version
+    $hostArchitecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
     if (-not $SkipTests) {
         & npm test
-        if ($LASTEXITCODE -ne 0) { throw 'Bridge tests failed.' }
+        if ($LASTEXITCODE -ne 0) { throw 'Bridge tests failed. Run npm ci before building.' }
         $nodePath = & node -p 'process.execPath'
-        & '.\build\process_test.exe' $nodePath (Join-Path $root 'tests\process-fixture.cjs')
-        if ($LASTEXITCODE -ne 0) { throw 'Native process tests failed.' }
+        if ($LASTEXITCODE -ne 0) { throw 'Node.js executable lookup failed.' }
     }
-    Copy-Item -LiteralPath 'build\NppFormatter.dll' -Destination 'dist\NppFormatter\NppFormatter.dll'
-    Copy-Item -LiteralPath 'bridge\bridge.cjs' -Destination 'dist\NppFormatter\bridge.cjs'
-    Copy-Item -LiteralPath 'README.md' -Destination 'dist\NppFormatter\README.md'
-    Copy-Item -LiteralPath 'README.zh-CN.md' -Destination 'dist\NppFormatter\README.zh-CN.md'
-    Copy-Item -LiteralPath 'third_party\npp\LICENSE' -Destination 'dist\NppFormatter\licenses\NotepadPlusPlus-GPL.txt'
-    Copy-Item -LiteralPath 'third_party\npp\Scintilla-LICENSE.txt' -Destination 'dist\NppFormatter\licenses\Scintilla.txt'
-    Copy-Item -LiteralPath 'third_party\json\LICENSE.MIT' -Destination 'dist\NppFormatter\licenses\nlohmann-json.txt'
-    $allowed = @('NppFormatter.dll', 'bridge.cjs', 'README.md', 'README.zh-CN.md', 'licenses/NotepadPlusPlus-GPL.txt', 'licenses/Scintilla.txt', 'licenses/nlohmann-json.txt')
     Add-Type -AssemblyName System.IO.Compression
-    $archivePath = Join-Path $root 'dist\NppFormatter-0.1.0-x64.zip'
-    $stream = [System.IO.File]::Open($archivePath, [System.IO.FileMode]::Create)
-    $archive = New-Object System.IO.Compression.ZipArchive($stream, [System.IO.Compression.ZipArchiveMode]::Create)
-    try {
-        foreach ($name in $allowed) {
-            $entry = $archive.CreateEntry("NppFormatter/$name")
-            $output = $entry.Open()
-            $inputFile = [System.IO.File]::OpenRead((Join-Path "$root\dist\NppFormatter" $name))
-            try { $inputFile.CopyTo($output) } finally { $inputFile.Dispose(); $output.Dispose() }
+    foreach ($arch in $architectures) {
+        $compiler = Join-Path $Toolchain "bin\$($targets[$arch])-w64-mingw32-clang++.exe"
+        if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+            throw 'LLVM-MinGW missing. Run python scripts/bootstrap.py or set LLVM_MINGW_ROOT / -Toolchain.'
         }
-    } finally { $archive.Dispose(); $stream.Dispose() }
-    [PSCustomObject]@{
-        Package = 'dist/NppFormatter-0.1.0-x64.zip'
-        SHA256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
+        $build = "build/$arch"
+        $stage = "dist/$arch/NppFormatter"
+        New-Item -ItemType Directory -Force -Path $build,"$stage/licenses" | Out-Null
+        $flags = @('-std=c++17', '-O2', '-static', '-DUNICODE', '-D_UNICODE', '-DNOMINMAX',
+                   '-Wall', '-Wextra', '-Isrc', '-Ithird_party/npp', '-Ithird_party/json')
+        & $compiler @flags -shared 'src/plugin.cpp' -o "$build/NppFormatter.dll" -lcomdlg32 -luser32 -lgdi32
+        if ($LASTEXITCODE -ne 0) { throw "$arch plugin build failed." }
+        & $compiler @flags -municode 'tests/process_test.cpp' -o "$build/process_test.exe"
+        if ($LASTEXITCODE -ne 0) { throw "$arch process test build failed." }
+        $canRun = ($arch -eq 'x86') -or ($arch -eq 'x64' -and $hostArchitecture -eq 'AMD64') -or ($arch -eq 'arm64' -and $hostArchitecture -eq 'ARM64')
+        if ($RequireRuntimeTests -and -not $canRun) { throw "$arch runtime tests require a matching Windows host." }
+        if (-not $SkipTests -and $canRun) {
+            & "./$build/process_test.exe" $nodePath (Join-Path $root 'tests/process-fixture.cjs')
+            if ($LASTEXITCODE -ne 0) { throw "$arch native process tests failed." }
+        } else {
+            Write-Host "SKIP $arch runtime tests (host=$hostArchitecture, SkipTests=$SkipTests); static package verification still runs."
+        }
+        Copy-Item -LiteralPath "$build/NppFormatter.dll" -Destination "$stage/NppFormatter.dll"
+        Copy-Item -LiteralPath 'bridge/bridge.cjs','README.md','README.zh-CN.md' -Destination $stage
+        Copy-Item -LiteralPath 'third_party/npp/LICENSE' -Destination "$stage/licenses/NotepadPlusPlus-GPL.txt"
+        Copy-Item -LiteralPath 'third_party/npp/Scintilla-LICENSE.txt' -Destination "$stage/licenses/Scintilla.txt"
+        Copy-Item -LiteralPath 'third_party/json/LICENSE.MIT' -Destination "$stage/licenses/nlohmann-json.txt"
+        $allowed = @('NppFormatter.dll', 'bridge.cjs', 'README.md', 'README.zh-CN.md', 'licenses/NotepadPlusPlus-GPL.txt', 'licenses/Scintilla.txt', 'licenses/nlohmann-json.txt')
+        $archivePath = "dist/NppFormatter-$version-$arch.zip"
+        $stream = [System.IO.File]::Open((Join-Path $root $archivePath), [System.IO.FileMode]::Create)
+        $archive = New-Object System.IO.Compression.ZipArchive($stream, [System.IO.Compression.ZipArchiveMode]::Create)
+        try {
+            foreach ($name in $allowed) {
+                $entry = $archive.CreateEntry("NppFormatter/$name")
+                $output = $entry.Open()
+                $inputFile = [System.IO.File]::OpenRead((Join-Path "$root/$stage" $name))
+                try { $inputFile.CopyTo($output) } finally { $inputFile.Dispose(); $output.Dispose() }
+            }
+        } finally { $archive.Dispose(); $stream.Dispose() }
+        & python 'scripts/verify_package.py' --arch $arch --package $archivePath --stage $stage
+        if ($LASTEXITCODE -ne 0) { throw "$arch package verification failed." }
+        $hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        "$hash  $([System.IO.Path]::GetFileName($archivePath))" | Set-Content -LiteralPath "$archivePath.sha256" -Encoding ascii
+        [PSCustomObject]@{ Package = $archivePath; SHA256 = $hash }
     }
 } finally { Pop-Location }

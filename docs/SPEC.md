@@ -61,7 +61,7 @@ Implemented slices:
    timeout, full-buffer formatting, one-step undo, stale-result rejection.
 3. Build and isolated Notepad++ smoke test. Package only runtime plugin files.
 
-The initial target is Notepad++ x64 and UTF-8 Scintilla buffers. Existing non-UTF-8
+The supported build targets are Notepad++ x86, x64, and ARM64 with UTF-8 Scintilla buffers. Existing non-UTF-8
 buffers receive a clear message asking the user to convert the encoding first.
 Saved files infer their parser from the path. For untitled files the user chooses
 a parser in settings. Empty parser on an untitled file is an actionable error.
@@ -75,7 +75,9 @@ by discarding that result too. An unchanged formatted result creates no undo ite
 - src/: C++17 Win32 implementation; bridge/: CommonJS bridge.
 - tests/: node:test integration tests, native smoke harness.
 - third_party/: upstream SDK headers and JSON header, with provenance.
-- scripts/build.ps1: x64 build and packaging.
+- scripts/build.ps1: LLVM-MinGW build and packaging for x86, x64, ARM64, or all.
+- scripts/bootstrap.py: download the SHA-256-pinned build-only toolchain.
+- scripts/verify_package.py: check PE machine, exports, imports, and ZIP payloads.
 - `npm ci` then `npm test`: development dependencies and bridge tests.
 - `powershell -ExecutionPolicy Bypass -File scripts/build.ps1`: build/package.
 
@@ -100,11 +102,16 @@ publishing externally or replacing an existing user installation.
 - One undo restores the previous text; a no-op leaves the undo stack untouched.
 - Editor remains responsive while a child process is running.
 - ZIP contains no Node.js runtime or Prettier package.
+- Each architecture produces a separate ZIP and SHA-256 sidecar; all ZIPs use
+  the same internal NppFormatter folder. The DLL must match the editor architecture.
+- CI runs native process and editor tests on matching Windows hosts, including
+  ARM64. Cross-builds on x64 explicitly skip ARM64 runtime tests, while PE and ZIP
+  validation still run. A skipped runtime test is not a pass.
 
 ## Backlog
 
 The five implementation stages above are the primary backlog. Worker reuse,
-other CPU architectures, additional package managers, legacy buffer encodings,
+additional package managers, legacy buffer encodings,
 incremental replacement for bookmarks/folding, and settings accessibility/DPI
 testing are later increments. Keep the READMEs' implemented/planned labels aligned
 with actual code and verification evidence as each stage lands.

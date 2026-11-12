@@ -1,5 +1,6 @@
 """Exercise the built plugin in a separate, hidden portable Notepad++ instance."""
 import ctypes as C
+import argparse
 from ctypes import wintypes as W
 import json
 import os
@@ -8,6 +9,10 @@ import shutil
 import subprocess
 import tempfile
 import time
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+from verify_package import MACHINES, PE, verify_dll
 
 ROOT = Path(__file__).resolve().parents[1]
 USER32 = C.WinDLL('user32', use_last_error=True)
@@ -91,22 +96,28 @@ def until(predicate, timeout=10):
     raise AssertionError('Timed out waiting for the editor')
 
 
-def run(sandbox):
+def run(sandbox, architecture):
     configured = os.environ.get('NPP_EXE') or shutil.which('notepad++')
     if configured:
         source = Path(configured)
     elif os.environ.get('ProgramFiles'):
         source = Path(os.environ['ProgramFiles']) / 'Notepad++' / 'notepad++.exe'
     else:
-        raise RuntimeError('Set NPP_EXE to a Notepad++ x64 executable.')
+        raise RuntimeError('Set NPP_EXE to a matching Notepad++ executable.')
     if not source.is_file():
         raise RuntimeError('Notepad++ was not found. Set NPP_EXE to its executable.')
+    if PE(source.read_bytes()).machine != MACHINES[architecture]:
+        raise RuntimeError('Notepad++ architecture differs from --arch; set NPP_EXE to a matching editor.')
+    stage = ROOT / 'dist' / architecture / 'NppFormatter'
+    verify_dll((stage / 'NppFormatter.dll').read_bytes(), architecture)
+    if C.sizeof(C.c_void_p) < 8 and architecture != 'x86':
+        raise RuntimeError('Use 64-bit Python to test a 64-bit editor.')
     shutil.copy2(source, sandbox / 'notepad++.exe')
     for name in ('langs.model.xml', 'stylers.model.xml'):
         shutil.copy2(source.parent / name, sandbox / name)
     (sandbox / 'doLocalConf.xml').write_text('', encoding='utf-8')
     destination = sandbox / 'plugins' / 'NppFormatter'
-    shutil.copytree(ROOT / 'dist' / 'NppFormatter', destination, dirs_exist_ok=True)
+    shutil.copytree(stage, destination, dirs_exist_ok=True)
     config_dir = sandbox / 'plugins' / 'Config'
     config_dir.mkdir(exist_ok=True)
     node = subprocess.check_output(['node', '-p', 'process.execPath'], text=True).strip()
@@ -186,8 +197,8 @@ def run(sandbox):
         assert text(editor) == changed, 'Stale result overwrote the edit'
         print('PASS real editor: responsive during formatting; stale result discarded', flush=True)
         project_config.unlink()
-        report = {'checks': 5, 'result': 'PASS'}
-        (ROOT / 'build' / 'editor-smoke.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
+        report = {'architecture': architecture, 'checks': 5, 'result': 'PASS'}
+        (ROOT / 'build' / architecture / 'editor-smoke.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     finally:
         if editor:
             USER32.SendMessageW(editor, 2014, 0, 0)
@@ -205,5 +216,8 @@ def run(sandbox):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--arch', choices=MACHINES, default='x64')
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='npp-formatter-test-\u4e2d\u6587 ') as directory:
-        run(Path(directory))
+        run(Path(directory), args.arch)

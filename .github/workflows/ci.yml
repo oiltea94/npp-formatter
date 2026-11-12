@@ -1,0 +1,76 @@
+name: Windows build and package checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86
+            runner: windows-latest
+            node: x64
+          - arch: x64
+            runner: windows-latest
+            node: x64
+          - arch: arm64
+            runner: windows-11-arm
+            node: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          architecture: ${{ matrix.node }}
+          cache: npm
+      - name: Install test dependencies and verified compiler
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+          python scripts/bootstrap.py
+          if ($LASTEXITCODE -ne 0) { throw 'Compiler bootstrap failed' }
+      - name: Build, test and verify package
+        run: ./scripts/build.ps1 -Architecture ${{ matrix.arch }} -RequireRuntimeTests
+      - name: Test artifact validation failure cases
+        run: python -m unittest discover -s tests -p test_artifacts.py
+      - name: Test matching portable Notepad++
+        run: |
+          python tests/download_npp.py --arch ${{ matrix.arch }}
+          if ($LASTEXITCODE -ne 0) { throw 'Editor download failed' }
+          $env:NPP_EXE = (Resolve-Path 'build/${{ matrix.arch }}/editor/notepad++.exe').Path
+          python tests/editor_smoke.py --arch ${{ matrix.arch }}
+          if ($LASTEXITCODE -ne 0) { throw 'Editor smoke test failed' }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: NppFormatter-${{ matrix.arch }}
+          path: |
+            dist/*-${{ matrix.arch }}.zip
+            dist/*-${{ matrix.arch }}.zip.sha256
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: editor-checks-${{ matrix.arch }}
+          path: build/${{ matrix.arch }}/editor-smoke.json
+          if-no-files-found: ignore

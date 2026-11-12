@@ -5,7 +5,7 @@
 <p align="center"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Windows-x64-0078D4" alt="Windows x64">
+  <img src="https://img.shields.io/badge/Windows-x86%20%7C%20x64%20%7C%20ARM64-0078D4" alt="Windows x86, x64 and ARM64">
   <img src="https://img.shields.io/badge/status-0.1.0%20prototype-orange" alt="Version 0.1.0 prototype">
   <img src="https://img.shields.io/badge/current%20adapter-Prettier%203.x-F7B93E" alt="Current prototype adapter: Prettier 3.x">
 </p>
@@ -20,7 +20,7 @@
 
 Inspired by [Formatter for Sublime Text](https://packages.sublimetext.com/packages/Formatter), NppFormatter aims to bring multiple formatting and text transformation tools into one configurable Notepad++ plugin. It is an independent project; Prettier is the first integration.
 
-> **Available today:** version 0.1.0 is an x64 prototype that formats whole documents with Prettier. Other tool adapters, generic tool definitions, text transformations, and tool pipelines are planned, not implemented. The installation and usage instructions below describe the working Prettier prototype.
+> **Available today:** version 0.1.0 is a prototype for x86, x64, and ARM64 that formats whole documents with Prettier. Other tool adapters, generic tool definitions, text transformations, and tool pipelines are planned, not implemented. The installation and usage instructions below describe the working Prettier prototype.
 
 ### Current capabilities
 
@@ -66,12 +66,18 @@ These requirements apply to the **current Prettier prototype**. Future adapters 
 
 | Component | Requirement |
 |---|---|
-| Editor | **Notepad++ x64** on Windows |
+| Editor | **Notepad++ x86, x64, or ARM64** on Windows |
 | Node.js | User-installed **18 or later** |
 | Prettier | User-installed **3.x** |
 | Document | UTF-8 editor buffer, up to **8 MiB**, with one ordinary caret or selection |
 
-Match the plugin to the architecture of **Notepad++**, not just Windows. This build targets x64; x86 and ARM64 packages are not included. Compatibility across editor and dependency versions still needs broader testing.
+Match the plugin to the architecture of **Notepad++**, not just Windows. For example, 32-bit Notepad++ on 64-bit Windows needs the x86 package. Node.js runs as a separate process: it must run on your Windows installation, but need not match the plugin's architecture. Compatibility across editor and dependency versions still needs broader testing.
+
+| Notepad++ architecture | Package |
+|---|---|
+| x86 (32-bit) | `NppFormatter-0.1.0-x86.zip` |
+| x64 (64-bit) | `NppFormatter-0.1.0-x64.zip` |
+| ARM64 | `NppFormatter-0.1.0-arm64.zip` |
 
 ## Installation
 
@@ -95,7 +101,7 @@ The prototype always uses the package directory selected in Settings. It does no
 
 ### 2. Install the plugin
 
-1. Obtain `NppFormatter-0.1.0-x64.zip`. Building this repository produces it under `dist/`; see [Build from source](#build-from-source).
+1. Obtain the ZIP matching your Notepad++ architecture from the table above. Building this repository produces packages under `dist/`; see [Build from source](#build-from-source).
 2. Close Notepad++. If `plugins/NppFormatter` already exists, rename it as a backup before upgrading.
 3. Extract the ZIP and copy its `NppFormatter` folder into Notepad++'s `plugins` directory.
 4. Restart Notepad++ and open **Plugins → NppFormatter → Settings...**.
@@ -178,7 +184,7 @@ Files matching the ignore rules are skipped. The document's LF or CRLF setting i
 
 | Symptom | What to check |
 |---|---|
-| NppFormatter is missing from the menu | Use x64 Notepad++, check the DLL folder structure, and restart the editor |
+| NppFormatter is missing from the menu | Match the DLL architecture to Notepad++, check the folder structure, and restart the editor |
 | Formatting opens Settings | Configure both dependency paths before the first request |
 | Node.js does not start | Use the actual absolute `node.exe` path returned by `process.execPath` |
 | Prettier cannot be loaded | Select a Prettier 3.x package directory containing `package.json`, not `prettier.cmd` |
@@ -199,26 +205,33 @@ To upgrade, close Notepad++, back up `plugins/NppFormatter`, and copy in the new
 
 ## Build from source
 
-Build tools: **Zig 0.14.1**, Node.js, npm, and Windows PowerShell. Make `zig` available on `PATH`. Python is needed only for the editor smoke test.
+Build tools: **LLVM-MinGW 20261104 (UCRT)**, Node.js, npm, **Python 3.12+**, and PowerShell. The pinned compiler runs on Windows x64 (or Windows 11 ARM64 using x64 emulation) and cross-compiles all three targets. It replaces the earlier Zig-only build.
 
 From the repository root:
 
 ```powershell
 npm ci
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
+python scripts/bootstrap.py
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architecture all
 ```
 
-The build resolves Zig from the `-Zig` argument, then the `ZIG_EXE` environment variable, then `PATH`. Compiler paths belong in your environment, not in project documentation.
+The bootstrap downloads the pinned compiler and verifies its SHA-256 before extraction. To use an existing LLVM-MinGW installation, pass its root with `-Toolchain` or set `LLVM_MINGW_ROOT`. `-Architecture` accepts `x86`, `x64` (default), `arm64`, or `all`.
 
-The build runs the bridge and native process tests, then creates `dist/NppFormatter-0.1.0-x64.zip`. The ZIP contains the DLL, bridge script, both READMEs, and third-party license notices. Node.js, Prettier, tests, and build tools stay outside the package; `npm ci` installs Prettier only as a development test dependency.
+The build runs the bridge tests and native process tests where the host can execute the target. On x64 Windows, ARM64 runtime tests are explicitly skipped; cross-compilation alone is not a runtime pass. `-SkipTests` skips bridge/native execution but always verifies the package. Each ZIP is checked for its PE architecture, six Notepad++ exports, system-only DLL imports, and exact contents. Outputs use `build/<arch>` and `dist/<arch>/NppFormatter`; ZIPs and SHA-256 sidecars are written to `dist/`.
+
+The ZIP contains the DLL, bridge script, both READMEs, and third-party license notices. Node.js, Prettier, tests, and build tools stay outside the package; `npm ci` installs Prettier only as a development test dependency.
 
 | Command | Purpose |
 |---|---|
 | `npm test` | Test formatting, configuration, ignore rules, Unicode cursor offsets, and errors using real Prettier |
 | `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1` | Build x64, run bridge/native tests, and package the plugin |
-| `python tests/editor_smoke.py` | Test the built plugin in an isolated copy of Notepad++ |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architecture all` | Build and package x86, x64, and ARM64 |
+| `python -m unittest discover -s tests -p test_artifacts.py` | Verify rejection of wrong architectures, missing exports, extra files, and stale ZIP contents after building |
+| `python tests/editor_smoke.py --arch x64` | Test the selected architecture in an isolated copy of Notepad++ |
 
-The smoke test locates Notepad++ through `NPP_EXE`, `PATH`, or the standard installation location. It runs a separate copy in an automatically cleaned temporary directory and checks formatting, caret mapping, undo, no-op behavior, and stale-result protection. Its result summary omits machine-specific paths.
+The smoke test locates Notepad++ through `NPP_EXE`, `PATH`, or the standard installation location and checks its architecture before launch. It runs a separate copy in an automatically cleaned temporary directory and checks formatting, caret mapping, undo, no-op behavior, and stale-result protection. Its result summary omits machine-specific paths. Use 64-bit Python for x64/ARM64 editor tests.
+
+CI builds x86 and x64 on `windows-latest`, and ARM64 on `windows-11-arm`. Each job runs native process tests and the matching portable editor test before uploading a ZIP and checksum. The portable test editor is pinned to Notepad++ 8.9.6 with a SHA-256 check. Workflow configuration alone does not establish a test pass; inspect the run for each architecture. No release is published automatically.
 
 Code is split between `src/` (native plugin and process management), `bridge/` (Prettier integration), and `tests/`. The prototype runs one Node.js process per request and allows one active request at a time.
 
@@ -232,7 +245,7 @@ The next implementation stages are:
 4. **Editor workflows:** add selection formatting and format on save, with tool-specific capabilities and the existing undo/stale-result protections.
 5. **Transformations and pipelines:** support minifiers, converters, and sequential tools; apply the final output in one undoable change only after every stage succeeds.
 
-Worker reuse, additional architectures and encodings, and improved bookmark/folding preservation are later work. See `docs/SPEC.md` in the source checkout for the target architecture and the current prototype's acceptance criteria.
+Worker reuse, additional encodings, and improved bookmark/folding preservation are later work. See `docs/SPEC.md` in the source checkout for the target architecture and the current prototype's acceptance criteria.
 
 For a bug report, include the plugin, Notepad++, Node.js, and Prettier versions; a minimal input; relevant configuration; the expected result; and the exact error or status message. For code changes, run the relevant tests and keep both READMEs in sync.
 
