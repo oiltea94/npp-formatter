@@ -21,7 +21,7 @@ int wmain(int argc, wchar_t** argv) {
                 check(*get(static_cast<Text>(key), language) != L'\0', "Missing translation");
         std::cout << "PASS host locale selection, English fallback and translation coverage\n";
         for (auto [language, parser] : {std::pair{L_JAVASCRIPT, "babel"}, {L_JS_EMBEDDED, "babel"},
-             {L_TYPESCRIPT, "typescript"}, {L_JSON, "json"}, {L_JSON5, "json5"},
+             {L_TYPESCRIPT, "typescript"}, {L_JAVA, "java"}, {L_JSON, "json"}, {L_JSON5, "json5"},
              {L_HTML, "html"}, {L_CSS, "css"}, {L_YAML, "yaml"}})
             check(std::string(formatter::parserForLanguage(language)) == parser, "Host parser mapping failed");
         for (int language : {L_TEXT, L_PYTHON, L_XML, L_USER, L_EXTERNAL})

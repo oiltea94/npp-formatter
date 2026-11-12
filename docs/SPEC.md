@@ -73,11 +73,20 @@ Implemented slices:
    Keep translation lookups on the UI thread; background detection returns data.
    Localize Settings validation, guidance, About, and status messages. Preserve
    external diagnostics and Windows-owned dialog buttons in their original language.
+6. Optional Java support: load user-installed prettier-plugin-java for saved
+   .java files, the Notepad++ Java language, and the Java picker entry. Honor
+   configured parser plugins; otherwise search the project before the selected
+   Prettier installation. Untitled documents use the latter location. Localize
+   missing-dependency guidance, preserve load errors, and offer explicit language
+   recovery for Java parse failures. Never bundle or install the optional package.
 
 The supported build targets are Notepad++ x86, x64, and ARM64 with UTF-8 Scintilla buffers. Existing non-UTF-8
 buffers receive a clear message asking the user to convert the encoding first.
-Saved files infer their parser from the path. For untitled files the user chooses
-a parser in settings. Empty parser on an untitled file is an actionable error.
+Saved files infer their parser from the path and project configuration. Untitled
+files use a supported Notepad++ document language, a remembered document choice,
+or plain-text JSON detection before prompting. Whole-text replacement clears the
+remembered choice; ordinary edits and formatter writeback preserve it. The
+language override command applies only to the current operation.
 Only one formatting request is active at a time. Background results are applied
 only if document identity, modification generation, and current contents match.
 Switching documents discards a pending result. A changed selection is preserved
@@ -111,6 +120,8 @@ publishing externally or replacing an existing user installation.
 - Format JSON/JS containing Chinese and emoji; preserve cursor by converting
   Scintilla UTF-8 byte positions to/from Prettier UTF-16 positions.
 - Respect a project's config and nearest .prettierignore for a saved file.
+- Format Java with the optional package; retain original text on missing or
+  broken dependencies, and allow retry after installation without restarting.
 - Error/timeout/invalid response/stale result leaves original text untouched.
 - One undo restores the previous text; a no-op leaves the undo stack untouched.
 - Editor remains responsive while a child process is running.

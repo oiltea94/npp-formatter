@@ -47,6 +47,11 @@ PARSE_ERRORS = {
     'zh-CN': ('格式化时未能解析文档', '查看错误详情', '重新选择语言...'),
     'zh-TW': ('格式化時未能解析文件', '查看錯誤詳情', '重新選擇語言...'),
 }
+JAVA_MISSING = {
+    'en': 'Java formatting requires prettier-plugin-java.',
+    'zh-CN': 'Java 格式化需要 prettier-plugin-java。',
+    'zh-TW': 'Java 格式化需要 prettier-plugin-java。',
+}
 USER32 = C.WinDLL('user32', use_last_error=True)
 KERNEL32 = C.WinDLL('kernel32', use_last_error=True)
 CALLBACK = C.WINFUNCTYPE(W.BOOL, W.HWND, W.LPARAM)
@@ -430,6 +435,7 @@ def run(sandbox, architecture, language='en'):
             body.append(buffer.value)
         about_text = accessible_text(about_dialog)
         assert labels['about_body'] in about_text, about_text
+        assert 'prettier-plugin-java' in about_text, 'About must explain the optional Java dependency'
         homepage = 'https://github.com/oiltea94/npp-formatter'
         homepage_label = {'en': 'Project homepage:', 'zh-CN': '项目主页：', 'zh-TW': '專案首頁：'}[language]
         homepage_line = f'{homepage_label} <a href="{homepage}">{homepage}</a>'
@@ -677,7 +683,64 @@ def run(sandbox, architecture, language='en'):
         format_to('const next: string = "ok";\n')
         assert ini_path.read_bytes() == settings_before_parsers
         print('PASS parser recovery: original details, no replacement on failure, explicit retry and remembered correction', flush=True)
-        report = {'architecture': architecture, 'language': language, 'checks': 13,
+
+        java_source = 'class Hello{int value=1;}'
+        java_expected = 'class Hello {\n\n  int value = 1;\n}\n'
+        new_document(java_source, 6)  # L_JAVA
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        missing = until(lambda: next((w for w in windows(process.pid)
+                                     if window_class(w) == '#32770' and window_title(w) == SETTING_ERRORS[language][0]), None))
+        missing_text = accessible_text(missing)
+        assert JAVA_MISSING[language] in missing_text, missing_text
+        assert 'npm install --global prettier-plugin-java' in missing_text
+        assert text(editor) == java_source, 'Missing Java dependency changed the document'
+        USER32.PostMessageW(missing, 0x10, 0, 0)
+        until(lambda: not USER32.IsWindow(missing))
+        for package in ('prettier-plugin-java', 'web-tree-sitter'):
+            shutil.copytree(ROOT / 'node_modules' / package, sandbox / 'node_modules' / package)
+        send(editor, 2171, 0, 0)  # SCI_EMPTYUNDOBUFFER
+        send(editor, 2025, java_source.index('value'), 0)  # SCI_GOTOPOS
+        format_to(java_expected)
+        assert send(editor, 2008, 0, 0) == java_expected.index('value')
+        send(editor, 2176, 0, 0)  # SCI_UNDO
+        assert text(editor) == java_source, 'Java formatting must be one undo action'
+        format_to(java_expected)
+        print('PASS Java: localized missing dependency, install and retry, host language, caret and undo', flush=True)
+
+        new_document(java_source)
+        choose(open_picker(), 'Java')
+        until(lambda: text(editor) == java_expected)
+        replace_part('value = 1', 'value=2')
+        format_to(java_expected.replace('1', '2'))
+        # A one-time override also works while Notepad++ has another language selected.
+        new_document(java_source, 58)
+        choose(open_picker(format_as_command), 'Java')
+        until(lambda: text(editor) == java_expected)
+        saved_java = str(sandbox / 'Hello.java').encode('utf-16-le') + b'\0\0'
+        assert KERNEL32.WriteProcessMemory(handle, memory, C.c_char_p(saved_java), len(saved_java), None)
+        assert send(main_window, 2024 + 78, 0, memory)
+        project_config.write_text('module.exports={tabWidth:4};', encoding='utf-8')
+        format_to(java_expected.replace('  int', '    int'))
+        (sandbox / '.prettierignore').write_text('Hello.java\n', encoding='utf-8')
+        set_text(java_source)
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        until(lambda: '.prettierignore' in status())
+        assert text(editor) == java_source
+        project_config.unlink()
+        print('PASS Java: picker memory, one-time override, saved extension, project config and ignore rules', flush=True)
+
+        new_document('export const answer=1;', 6)
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        error_dialog = wait_parse_error()
+        invoke_accessible(error_dialog, PARSE_ERRORS[language][1])
+        assert 'Failed to parse' in accessible_text(error_dialog)
+        assert text(editor) == 'export const answer=1;'
+        USER32.PostMessageW(error_dialog, 1024 + 102, 100, 0)
+        choose(wait_picker(), 'JavaScript / JSX')
+        until(lambda: text(editor) == 'export const answer = 1;\n')
+        assert ini_path.read_bytes() == settings_before_parsers
+        print('PASS Java: original parse diagnostic, explicit language retry and unchanged global settings', flush=True)
+        report = {'architecture': architecture, 'language': language, 'checks': 16,
                   'live_language_switch': language == 'en', 'result': 'PASS'}
         (ROOT / 'build' / architecture / f'editor-smoke-{language}.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     finally:

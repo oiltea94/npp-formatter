@@ -81,6 +81,37 @@ function nearestIgnore(filePath) {
   }
 }
 
+const javaPluginName = 'prettier-plugin-java';
+
+function resolveJavaPlugin(fromFiles) {
+  for (const from of new Set(fromFiles.filter(Boolean))) {
+    const resolver = createRequire(from);
+    try { return resolver.resolve(javaPluginName); }
+    catch (error) {
+      const installed = resolver.resolve.paths(javaPluginName).some(root => fs.existsSync(path.join(root, javaPluginName)));
+      if (error.code !== 'MODULE_NOT_FOUND' || installed) throw error;
+    }
+  }
+  const error = new Error('Install prettier-plugin-java in the project or alongside the configured Prettier package.');
+  error.code = 'MISSING_JAVA_PLUGIN';
+  throw error;
+}
+
+async function addJavaPlugin(plugins, fromFiles) {
+  // Respect project-supplied Java parsers, including plugin objects and custom paths.
+  for (let i = 0; i < plugins.length; ++i) {
+    if (typeof plugins[i] === 'string') {
+      const imported = await import(pathToFileURL(plugins[i]).href);
+      plugins[i] = imported.default ?? imported;
+    }
+    if (plugins[i]?.parsers?.java) return;
+  }
+  const imported = await import(pathToFileURL(resolveJavaPlugin(fromFiles)).href);
+  const plugin = imported.default ?? imported;
+  if (!plugin.parsers?.java) throw new Error('The installed prettier-plugin-java does not provide a Java parser.');
+  plugins.push(plugin);
+}
+
 async function run(request) {
   if (request?.operation === 'detectNode') {
     if (Number(process.versions.node.split('.')[0]) < 18) throw new Error('Node.js 18 or later is required.');
@@ -118,17 +149,22 @@ async function run(request) {
   if (filePath) process.chdir(path.dirname(filePath));
   const config = filePath ? await prettier.resolveConfig(filePath, { editorconfig: true }) : null;
   const configFile = filePath ? await prettier.resolveConfigFile(filePath) : null;
-  const plugins = (config?.plugins ?? []).map((plugin) => {
-    if (typeof plugin !== 'string') return plugin;
-    const from = configFile ?? filePath ?? packageFile;
-    return createRequire(from).resolve(plugin);
-  });
+  // Ignoring a file must not require installing its optional language dependency.
   if (filePath) {
     const info = await prettier.getFileInfo(filePath, {
-      ignorePath: nearestIgnore(filePath), resolveConfig: false, plugins,
+      ignorePath: nearestIgnore(filePath), resolveConfig: false,
     });
     if (info.ignored) return { ok: true, ignored: true, version: prettier.version };
   }
+  const plugins = (config?.plugins ?? []).map((plugin) => {
+    if (typeof plugin !== 'string') return plugin;
+    const from = configFile ?? filePath ?? packageFile;
+    if (plugin === javaPluginName) return resolveJavaPlugin([from, packageFile]);
+    return createRequire(from).resolve(plugin);
+  });
+  if (!parser && !config?.parser && filePath && path.extname(filePath).toLowerCase() === '.java') parser = 'java';
+  const java = (parser ?? config?.parser) === 'java';
+  if (java) await addJavaPlugin(plugins, [filePath, configFile, packageFile]);
   const options = {
     endOfLine: request.endOfLine ?? 'auto', ...config, plugins,
     filepath: filePath, cursorOffset: request.cursorOffset,
@@ -141,7 +177,8 @@ async function run(request) {
     process.exitCode = 1;
     return {
       ok: false, error: `${error.name}: ${error.message}`,
-      canChooseParser: Boolean(error.loc || error.name === 'SyntaxError' || error.name === 'UndefinedParserError'),
+      canChooseParser: Boolean(error.loc || error.name === 'SyntaxError' || error.name === 'UndefinedParserError' ||
+        (java && error.name === 'Error' && error.message.startsWith('Failed to parse:'))),
     };
   }
 }
@@ -158,7 +195,7 @@ async function run(request) {
     const request = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     process.stdout.write(JSON.stringify(await run(request)));
   } catch (error) {
-    process.stdout.write(JSON.stringify({ ok: false, error: `${error.name}: ${error.message}` }));
+    process.stdout.write(JSON.stringify({ ok: false, error: `${error.name}: ${error.message}`, code: error.code }));
     process.exitCode = 1;
   }
 })();

@@ -45,7 +45,7 @@ NppFormatter 的设计参考 [Sublime Text 的 Formatter](https://packages.subli
 
 ## 格式化语言
 
-语言选择窗口和 **“按指定语言格式化...”** 当前提供以下 **13 个选项**，均使用 Prettier 内置解析器，无需额外安装语言包。下表中的示例已使用 Prettier **3.6.2** 验证；具体语法支持取决于用户安装的 Prettier 版本。
+语言选择窗口和 **“按指定语言格式化...”** 当前提供 **13 个内置选项及 Java**。内置格式无需额外安装语言包；Java 需要可选的 `prettier-plugin-java` 包。具体语法支持取决于用户安装的格式化工具版本。
 
 | 语言 / 格式 | 常见已保存文件扩展名 | 选择器选项 |
 |---|---|---|
@@ -62,12 +62,15 @@ NppFormatter 的设计参考 [Sublime Text 的 Formatter](https://packages.subli
 | GraphQL | `.graphql`、`.gql` | GraphQL |
 | Vue 单文件组件 | `.vue` | Vue |
 | Angular 模板 | `.component.html` | Angular HTML |
+| Java（可选插件） | `.java` | Java |
 
 **已保存文件还支持：** Flow（`.js.flow`）、带注释的 JSON（`.jsonc`）、MDX（`.mdx`）、Handlebars（`.hbs`、`.handlebars`）、MJML（`.mjml`）、PostCSS（`.pcss`、`.postcss`）和 JSON.stringify 风格的 JSON（`.importmap`）。这些格式由 Prettier 根据文件路径推断，暂未在选择器中提供独立选项。已保存文件也可通过项目配置显式指定内置解析器，例如 Lightning Web Components 使用的 `lwc`。这里列举的是常见扩展名，并非完整列表。
 
-**未保存文档：** 当前自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可使用“按指定语言格式化...”，或将文档保持为普通文本，在提示时选择语言。MDX 与 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。
+**未保存文档：** 当前自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、Java、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可使用“按指定语言格式化...”，或将文档保持为普通文本，在提示时选择语言。MDX 与 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。
 
-**支持范围：** Java 并非内置语言或选择器选项；C/C++、Python 适配器仍在规划中。其他语言需要单独安装工具或项目插件。Notepad++ 提供某种语言的语法高亮，并不代表插件已具备对应格式化能力。
+**Java 依赖发现：** 已保存的 `.java` 文件优先使用项目配置显式指定的 Java 解析器插件，否则依次在文件所属项目及上级目录、配置文件位置、所选 Prettier 的安装位置查找 `prettier-plugin-java`。未保存文档使用所选 Prettier 同一位置的安装。无需编写 Java 专用项目配置。依赖缺失时显示安装提示并保留原文，安装后重新格式化即可；已找到的插件若加载失败，会报告原始错误，不会悄悄换用其他副本。
+
+**支持范围：** C/C++、Python 适配器仍在规划中。其他语言需要单独安装工具或项目插件。Notepad++ 提供某种语言的语法高亮，并不代表插件已具备对应格式化能力。
 
 ## 格式化示例
 
@@ -123,6 +126,14 @@ npm install --save-dev --save-exact prettier@3
 ```powershell
 npm install --global prettier@3
 ```
+
+**可选的 Java 支持** — 在安装 Prettier 的同一项目中安装 Java 包：
+
+```powershell
+npm install --save-dev --save-exact prettier-plugin-java@2.11.0
+```
+
+若 Prettier 为全局安装，则使用 `npm install --global prettier-plugin-java@2.11.0`。Java 包是可选依赖，插件不会捆绑或自动安装；未安装时仍可格式化内置语言。
 
 原型始终使用 Settings 中指定的包目录，不会随当前项目自动切换 Prettier 安装。
 
@@ -211,7 +222,7 @@ Join-Path (npm root -g) 'prettier'
 | Format with language... | 选择仅本次生效的语言，适用于已保存文件；保留文件类型、记住的语言、项目选项及忽略规则 |
 
 - **已保存文档**：将文件路径传给 Prettier，用于推断解析器和查找配置。常见内置格式包括 JavaScript、TypeScript、JSON、HTML、CSS、Markdown 和 YAML。
-- **新建且尚未保存的文档**：优先跟随 Notepad++ 中选择的文档语言，支持 JavaScript、TypeScript、JSON、JSON5、HTML、CSS 和 YAML。纯文本中的有效 JSON 会在后台自动识别；其他情况在格式化时弹出语言选择窗口，选择仅在本次会话中为当前文档记住。整篇替换（包括清空后重新粘贴）、关闭、保存文档或切换 Notepad++ 文档语言后清除选择；普通编辑和插件自身的格式化写回会保留选择。取消选择保留原文。此类文档没有用于查找项目配置的文件路径。
+- **新建且尚未保存的文档**：优先跟随 Notepad++ 中选择的文档语言，支持 JavaScript、TypeScript、Java、JSON、JSON5、HTML、CSS 和 YAML。纯文本中的有效 JSON 会在后台自动识别；其他情况在格式化时弹出语言选择窗口，选择仅在本次会话中为当前文档记住。整篇替换（包括清空后重新粘贴）、关闭、保存文档或切换 Notepad++ 文档语言后清除选择；普通编辑和插件自身的格式化写回会保留选择。取消选择保留原文。此类文档没有用于查找项目配置的文件路径。
 - **已有配置**：旧的全局 `UntitledParser` 值不再使用，下次保存配置时移除；依赖路径与超时时间保留。如果当前文档记住了错误的选择，可在 Notepad++ 中选择正确语言，或切换到其他语言后再切回普通文本以重新选择。
 - **选区处理**：命令仍会格式化全文；成功替换后，普通选区收拢到映射后的光标位置。原型暂不处理多光标和矩形选区。
 - **格式化期间**：修改内容、切换文档、保存，或改变光标与选区，都可能使待返回结果被丢弃。停止这些操作后重新执行即可。

@@ -474,6 +474,8 @@ void applyCompletion() {
     if (!result->error.empty()) throw std::runtime_error(result->error);
     bool retry = false;
     if (!result->response.value("ok", false)) {
+        if (result->response.contains("code") && result->response.at("code") == "MISSING_JAVA_PLUGIN")
+            throw std::runtime_error(utf8(tr(Text::JavaPluginMissing)));
         auto error = result->response.value("error", "Invalid bridge response.");
         if (!result->response.value("canChooseParser", false)) throw std::runtime_error(error);
         status(Text::FormatFailed);

@@ -45,7 +45,7 @@ External tools are installed by the user. In the target architecture, runtime de
 
 ## Formatting languages
 
-The following **13 choices** are available in the language picker and **Format with language...**. They use Prettier's built-in parsers; no additional language package is needed. The examples below were checked with Prettier **3.6.2**. Actual syntax support depends on the installed Prettier version.
+The language picker and **Format with language...** offer **13 built-in choices plus Java**. Built-in formats need no additional language package; Java requires the optional `prettier-plugin-java` package. Actual syntax support depends on the installed formatter versions.
 
 | Language / format | Common saved-file extensions | Picker choice |
 |---|---|---|
@@ -62,12 +62,15 @@ The following **13 choices** are available in the language picker and **Format w
 | GraphQL | `.graphql`, `.gql` | GraphQL |
 | Vue single-file components | `.vue` | Vue |
 | Angular templates | `.component.html` | Angular HTML |
+| Java (optional plugin) | `.java` | Java |
 
 **Additional saved-file formats:** Flow (`.js.flow`), JSON with comments (`.jsonc`), MDX (`.mdx`), Handlebars (`.hbs`, `.handlebars`), MJML (`.mjml`), PostCSS (`.pcss`, `.postcss`), and JSON.stringify-style JSON (`.importmap`). These are inferred by Prettier from the file path; they have no dedicated picker entry. A saved file's project configuration may also select a built-in parser explicitly, such as `lwc` for Lightning Web Components. Extension examples are not an exhaustive list.
 
-**Untitled documents:** automatic mapping from Notepad++'s document language currently covers JavaScript, TypeScript, JSON, JSON5, HTML, CSS, and YAML. For the other picker choices, use **Format with language...**, or keep the document in plain text and select a language when prompted. MDX and Handlebars are distinct formats; choosing Markdown or HTML is not equivalent.
+**Untitled documents:** automatic mapping from Notepad++'s document language currently covers JavaScript, TypeScript, Java, JSON, JSON5, HTML, CSS, and YAML. For the other picker choices, use **Format with language...**, or keep the document in plain text and select a language when prompted. MDX and Handlebars are distinct formats; choosing Markdown or HTML is not equivalent.
 
-**Scope:** Java is not a built-in language or a picker choice. C/C++ and Python adapters are still planned. Additional languages require separately installed tools or project plugins. Notepad++ syntax highlighting alone does not add formatting support.
+**Java dependency discovery:** saved `.java` files use an explicitly configured Java parser plugin first, then look for `prettier-plugin-java` in the file's project and ancestors, the configuration's location, and alongside the selected Prettier installation. Untitled documents use the installation alongside the selected Prettier. No Java-specific project configuration is required. Missing dependencies show an installation message and leave the document unchanged; after installing, retry formatting. An installed plugin's load error is reported without silently switching to another copy.
+
+**Scope:** C/C++ and Python adapters are still planned. Additional languages require separately installed tools or project plugins. Notepad++ syntax highlighting alone does not add formatting support.
 
 ## Example
 
@@ -123,6 +126,14 @@ npm install --save-dev --save-exact prettier@3
 ```powershell
 npm install --global prettier@3
 ```
+
+**Optional Java support** — install the Java package in the same project as Prettier:
+
+```powershell
+npm install --save-dev --save-exact prettier-plugin-java@2.11.0
+```
+
+For a global Prettier installation, use `npm install --global prettier-plugin-java@2.11.0` instead. The Java package is optional and is not bundled or installed automatically. Built-in formats work without it.
 
 The prototype always uses the package directory selected in Settings. It does not automatically switch to a different project's Prettier installation.
 
@@ -211,7 +222,7 @@ Select **Plugins → NppFormatter → Format document**. To assign a shortcut, l
 | Format with language... | Choose a language for this operation only, including for saved files; keep the file type, remembered language, project options, and ignore rules |
 
 - **Saved documents:** the file path is passed to Prettier for parser inference and configuration lookup. Common built-in formats include JavaScript, TypeScript, JSON, HTML, CSS, Markdown, and YAML.
-- **Untitled documents:** the formatter follows the document language selected in Notepad++ for JavaScript, TypeScript, JSON, JSON5, HTML, CSS, and YAML. For plain text, valid JSON is detected automatically in the background. Otherwise, a language picker appears when you format; its choice is remembered only for that document during the current session. Replacing all text (including clearing and pasting again), closing or saving the document, or changing its language in Notepad++, clears the choice. Ordinary edits and the formatter's own text replacement preserve it. Cancel leaves the text unchanged. These documents have no project path for configuration lookup.
+- **Untitled documents:** the formatter follows the document language selected in Notepad++ for JavaScript, TypeScript, Java, JSON, JSON5, HTML, CSS, and YAML. For plain text, valid JSON is detected automatically in the background. Otherwise, a language picker appears when you format; its choice is remembered only for that document during the current session. Replacing all text (including clearing and pasting again), closing or saving the document, or changing its language in Notepad++, clears the choice. Ordinary edits and the formatter's own text replacement preserve it. Cancel leaves the text unchanged. These documents have no project path for configuration lookup.
 - **Existing settings:** the old global `UntitledParser` value is ignored and removed the next time settings are saved; dependency paths and timeout are retained. To correct a document's remembered choice, select its language in Notepad++ (or switch to another language and back to plain text to choose again).
 - **Selections:** the command still formats the whole document. After replacement, an ordinary selection collapses to the mapped caret. Multiple carets and rectangular selections are not supported in this prototype.
 - **While formatting:** editing, switching documents, saving, or changing the caret/selection can cause the pending result to be discarded. Run the command again once you are ready.
