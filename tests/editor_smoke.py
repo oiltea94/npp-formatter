@@ -111,55 +111,33 @@ def window_title(window):
     return title.value
 
 
-def run_ui_automation(script):
-    # UIA calls belong on a windowless MTA thread, not PowerShell's default STA.
-    # https://learn.microsoft.com/windows/win32/winauto/uiauto-threading
-    command = ['powershell', '-NoProfile', '-NonInteractive', '-Mta', '-Command', script]
-    try:
-        return subprocess.run(command, check=True, capture_output=True,
-                              encoding='utf-8', timeout=15).stdout
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
-        diagnostic = error.stderr or ''
-        if isinstance(diagnostic, bytes):
-            diagnostic = diagnostic.decode('utf-8', errors='replace')
-        raise RuntimeError(f'UI Automation helper failed: {diagnostic.strip()}') from error
+class UIAutomation:
+    def __init__(self, architecture):
+        self.helper = ROOT / 'build' / architecture / 'ui_automation.exe'
+        if not self.helper.is_file():
+            raise RuntimeError('Build the UI Automation helper with scripts/build.ps1 before testing.')
+        if PE(self.helper.read_bytes()).machine != MACHINES[architecture]:
+            raise RuntimeError('UI Automation helper architecture differs from the editor.')
 
+    def run(self, operation, window, *arguments):
+        command = [str(self.helper), operation, str(window), *arguments]
+        try:
+            return subprocess.run(command, check=True, capture_output=True,
+                                  encoding='utf-8', timeout=15,
+                                  creationflags=subprocess.CREATE_NO_WINDOW).stdout
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+            diagnostic = error.stderr or ''
+            if isinstance(diagnostic, bytes):
+                diagnostic = diagnostic.decode('utf-8', errors='replace')
+            reason = 'timed out after 15s' if isinstance(error, subprocess.TimeoutExpired) else f'exited {error.returncode}'
+            raise RuntimeError(f'UI Automation helper {reason}: {diagnostic.strip()}') from error
 
-def accessible_text(window):
-    # Task Dialog draws its body with DirectUI, which does not expose WM_GETTEXT.
-    script = f'''
-        $ErrorActionPreference = 'Stop'
-        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-        [Console]::Error.WriteLine('UIA: loading assemblies')
-        Add-Type -AssemblyName UIAutomationClient
-        [Console]::Error.WriteLine('UIA: locating dialog')
-        $root = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]{window})
-        [Console]::Error.WriteLine('UIA: enumerating descendants')
-        $elements = $root.FindAll([Windows.Automation.TreeScope]::Descendants,
-                                 [Windows.Automation.Condition]::TrueCondition)
-        [Console]::Error.WriteLine('UIA: reading names')
-        foreach ($element in $elements) {{ $element.Current.Name }}
-    '''
-    return run_ui_automation(script)
+    def text(self, window):
+        # Task Dialog's DirectUI content is not exposed through WM_GETTEXT.
+        return self.run('text', window)
 
-
-def invoke_accessible(window, name):
-    escaped = name.replace("'", "''")
-    script = f'''
-        $ErrorActionPreference = 'Stop'
-        [Console]::Error.WriteLine('UIA: loading assemblies')
-        Add-Type -AssemblyName UIAutomationClient
-        [Console]::Error.WriteLine('UIA: locating dialog')
-        $root = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]{window})
-        $condition = [Windows.Automation.PropertyCondition]::new(
-            [Windows.Automation.AutomationElement]::NameProperty, '{escaped}')
-        [Console]::Error.WriteLine('UIA: locating control')
-        $target = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
-        [Console]::Error.WriteLine('UIA: invoking control')
-        $pattern = $target.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)
-        $pattern.Invoke()
-    '''
-    run_ui_automation(script)
+    def invoke(self, window, name):
+        self.run('invoke', window, name)
 
 
 def windows(pid):
@@ -211,6 +189,7 @@ def until(predicate, timeout=10):
 
 def run(sandbox, architecture, language='en'):
     labels = LANGUAGES[language]
+    automation = UIAutomation(architecture)
     configured = os.environ.get('NPP_EXE') or shutil.which('notepad++')
     if configured:
         source = Path(configured)
@@ -454,7 +433,11 @@ def run(sandbox, architecture, language='en'):
             buffer = C.create_unicode_buffer(send(control, 14, 0, 0) + 1)
             send(control, 13, len(buffer), C.addressof(buffer))
             body.append(buffer.value)
-        about_text = accessible_text(about_dialog)
+        about_text = automation.text(about_dialog)
+        # Exercise repeated client creation/teardown against the same live provider.
+        for _ in range(2):
+            assert automation.text(about_dialog) == about_text, 'Repeated UIA reads changed About text'
+        print(f'PASS native UI Automation: {architecture} helper, repeated About reads', flush=True)
         assert labels['about_body'] in about_text, about_text
         assert 'prettier-plugin-java' in about_text, 'About must explain the optional Java dependency'
         homepage = 'https://github.com/oiltea94/npp-formatter'
@@ -647,7 +630,7 @@ def run(sandbox, architecture, language='en'):
             title, details, retry = PARSE_ERRORS[language]
             dialog = until(lambda: next((w for w in windows(process.pid)
                                         if window_class(w) == '#32770' and window_title(w) == title), None))
-            assert retry in accessible_text(dialog)
+            assert retry in automation.text(dialog)
             return dialog
 
         # The saved JSON file can be formatted as JavaScript for one operation only.
@@ -690,8 +673,9 @@ def run(sandbox, architecture, language='en'):
         invalid_js = text(editor)
         USER32.PostMessageW(main_window, 0x111, command, 0)
         error_dialog = wait_parse_error()
-        invoke_accessible(error_dialog, PARSE_ERRORS[language][1])
-        assert 'SyntaxError' in accessible_text(error_dialog), 'Original parser diagnostic was lost'
+        automation.invoke(error_dialog, PARSE_ERRORS[language][1])
+        # Invoke can return before DirectUI has expanded and exposed the details.
+        until(lambda: 'SyntaxError' in automation.text(error_dialog))
         assert text(editor) == invalid_js
         USER32.PostMessageW(error_dialog, 0x10, 0, 0)
         until(lambda: not USER32.IsWindow(error_dialog))
@@ -711,7 +695,7 @@ def run(sandbox, architecture, language='en'):
         USER32.PostMessageW(main_window, 0x111, command, 0)
         missing = until(lambda: next((w for w in windows(process.pid)
                                      if window_class(w) == '#32770' and window_title(w) == SETTING_ERRORS[language][0]), None))
-        missing_text = accessible_text(missing)
+        missing_text = automation.text(missing)
         assert JAVA_MISSING[language] in missing_text, missing_text
         assert 'npm install --global prettier-plugin-java' in missing_text
         assert text(editor) == java_source, 'Missing Java dependency changed the document'
@@ -753,8 +737,8 @@ def run(sandbox, architecture, language='en'):
         new_document('export const answer=1;', 6)
         USER32.PostMessageW(main_window, 0x111, command, 0)
         error_dialog = wait_parse_error()
-        invoke_accessible(error_dialog, PARSE_ERRORS[language][1])
-        assert 'Failed to parse' in accessible_text(error_dialog)
+        automation.invoke(error_dialog, PARSE_ERRORS[language][1])
+        until(lambda: 'Failed to parse' in automation.text(error_dialog))
         assert text(editor) == 'export const answer=1;'
         USER32.PostMessageW(error_dialog, 1024 + 102, 100, 0)
         choose(wait_picker(), 'JavaScript / JSX')

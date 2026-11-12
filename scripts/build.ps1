@@ -41,6 +41,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "$arch plugin build failed." }
         & $compiler @flags -municode 'tests/process_test.cpp' -o "$build/process_test.exe"
         if ($LASTEXITCODE -ne 0) { throw "$arch process test build failed." }
+        & $compiler @flags -municode 'tests/ui_automation.cpp' -o "$build/ui_automation.exe" -lole32 -loleaut32 -luuid
+        if ($LASTEXITCODE -ne 0) { throw "$arch UI Automation helper build failed." }
         $canRun = ($arch -eq 'x86') -or ($arch -eq 'x64' -and $hostArchitecture -eq 'AMD64') -or ($arch -eq 'arm64' -and $hostArchitecture -eq 'ARM64')
         if ($RequireRuntimeTests -and -not $canRun) { throw "$arch runtime tests require a matching Windows host." }
         if (-not $SkipTests -and $canRun) {
