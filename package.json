@@ -1,0 +1,9 @@
+{
+  "name": "npp-formatter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A configurable code formatter and text transformer for Notepad++",
+  "scripts": { "test": "node --test tests/bridge.test.cjs" },
+  "engines": { "node": ">=18" },
+  "devDependencies": { "prettier": "3.6.2" }
+}

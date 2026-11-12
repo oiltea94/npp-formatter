@@ -1,0 +1,11 @@
+.tools/
+build/
+dist/
+node_modules/
+.test-tmp/
+*.bak
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example

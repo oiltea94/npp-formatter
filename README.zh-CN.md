@@ -1,0 +1,241 @@
+<h1 align="center">NppFormatter</h1>
+
+<p align="center">可配置的 Notepad++ 代码格式化与文本转换插件。</p>
+
+<p align="center"><a href="README.md">English</a> · <strong>简体中文</strong></p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Windows-x64-0078D4" alt="Windows x64">
+  <img src="https://img.shields.io/badge/status-0.1.0%20prototype-orange" alt="0.1.0 原型版本">
+  <img src="https://img.shields.io/badge/current%20adapter-Prettier%203.x-F7B93E" alt="当前原型已接入：Prettier 3.x">
+</p>
+
+<p align="center">
+  <a href="#工具支持">工具支持</a> ·
+  <a href="#安装">安装</a> ·
+  <a href="#使用">使用</a> ·
+  <a href="#常见问题">常见问题</a> ·
+  <a href="#从源码构建">从源码构建</a>
+</p>
+
+NppFormatter 的设计参考 [Sublime Text 的 Formatter](https://packages.sublimetext.com/packages/Formatter)，目标是在一个可配置的 Notepad++ 插件中接入多种格式化和文本转换工具。本项目独立开发，Prettier 是第一个接入的工具。
+
+> **当前已实现：** 0.1.0 是通过 Prettier 格式化全文的 x64 原型。其他工具适配器、通用工具配置、文本转换和工具串联属于后续计划，尚未实现。下面的安装与使用说明对应当前可运行的 Prettier 原型。
+
+### 当前功能
+
+- **使用已有依赖**：为当前适配器配置本机的 Node.js 可执行文件和 Prettier 包，插件不捆绑或安装这两项依赖。
+- **遵循项目规则**：已保存文件使用项目的 Prettier 配置、EditorConfig 设置和最近的 `.prettierignore`。
+- **保持编辑流畅**：格式化在后台进程中执行；请求期间文档发生变化时，丢弃过期结果。
+- **一次撤销恢复**：在当前文档中替换格式化结果，保留光标和滚动位置；按 **Ctrl+Z** 即可恢复，内容未变化时不增加撤销记录。
+
+## 工具支持
+
+| 工具或能力 | 状态 | 用途 |
+|---|---|---|
+| Prettier | 原型已实现 | 按项目配置格式化全文 |
+| clang-format | 计划接入 | C/C++ 格式化 |
+| Ruff | 计划接入 | Python 格式化 |
+| 用户自定义命令行工具 | 规划中 | 通过配置注册工具，指定适用语言、可执行文件、参数、工作目录和超时 |
+| 压缩工具与文本转换工具 | 规划中 | 通过外部工具扩展文本处理能力 |
+| 工具串联 | 规划中 | 按顺序执行多个工具，最后统一回写 |
+
+外部工具由用户自行安装。在目标架构中，运行依赖归属于各个适配器：Prettier 需要 Node.js，通用插件核心不统一要求 Node.js。**当前原型仍需安装 Node.js 和 Prettier**，因为目前仅实现了这一种接入。
+
+## 格式化示例
+
+**格式化前 — JavaScript**
+
+```javascript
+function greet(name){return "Hello, "+name;}
+```
+
+**格式化后 — Prettier 默认设置**
+
+```javascript
+function greet(name) {
+  return "Hello, " + name;
+}
+```
+
+项目配置可以改变引号、分号、缩进和换行符。
+
+## 环境要求
+
+以下要求对应**当前 Prettier 原型**；未来的其他适配器会有各自的工具依赖。
+
+| 组件 | 要求 |
+|---|---|
+| 编辑器 | Windows 下的 **Notepad++ x64** |
+| Node.js | 用户自行安装 **18 或以上版本** |
+| Prettier | 用户自行安装 **3.x** |
+| 文档 | UTF-8 编辑缓冲区，最多 **8 MiB**，使用单个普通光标或选区 |
+
+插件架构须匹配 **Notepad++**，不能只根据 Windows 架构选择。当前构建目标为 x64，未包含 x86 或 ARM64 安装包；不同编辑器和依赖版本的兼容性仍需扩大验证。
+
+## 安装
+
+### 1. 安装 Prettier 适配器依赖
+
+安装 Node.js 后，用下面**任意一种方式**安装 Prettier。
+
+**项目安装** — 在项目目录中运行：
+
+```powershell
+npm install --save-dev --save-exact prettier@3
+```
+
+**全局安装** — 便于格式化不同项目中的文件：
+
+```powershell
+npm install --global prettier@3
+```
+
+原型始终使用 Settings 中指定的包目录，不会随当前项目自动切换 Prettier 安装。
+
+### 2. 安装插件
+
+1. 准备 `NppFormatter-0.1.0-x64.zip`。从本仓库构建后，安装包位于 `dist/`；参见[从源码构建](#从源码构建)。
+2. 关闭 Notepad++。升级已有版本时，先将 `plugins/NppFormatter` 文件夹改名备份。
+3. 解压 ZIP，将其中的 `NppFormatter` 文件夹复制到 Notepad++ 的 `plugins` 目录。
+4. 重启 Notepad++，打开 **插件 → NppFormatter → Settings...**。
+
+```text
+Notepad++/
+└── plugins/
+    └── NppFormatter/
+        ├── NppFormatter.dll
+        ├── bridge.cjs
+        ├── README.md
+        ├── README.zh-CN.md
+        └── licenses/
+```
+
+`bridge.cjs` 必须与 DLL 位于同一目录，安装时需要同时复制。
+
+### 3. 配置路径
+
+查询实际的 Node.js 可执行文件路径：
+
+```powershell
+node -p "process.execPath"
+```
+
+使用**项目安装**时，在对应项目目录中查询 Prettier 包路径：
+
+```powershell
+node -p "require('path').dirname(require.resolve('prettier/package.json'))"
+```
+
+使用**全局安装**时，运行以下命令获得包目录：
+
+```powershell
+Join-Path (npm root -g) 'prettier'
+```
+
+| 设置项 | 填写内容 |
+|---|---|
+| Node.js executable | `node.exe` 的绝对路径 |
+| Prettier package directory | 包含 Prettier `package.json` 的绝对目录；Browse 选择该文件后会自动填入所在目录 |
+| Untitled-document parser | 未保存文档使用的解析器，默认 `json` |
+| Timeout in milliseconds | 默认 `10000` 毫秒（10 秒），允许范围为 `1000`–`120000` |
+
+点击 **Save** 保存。Prettier 路径应指向包本身的目录，避免选成 `bin` 目录或 `prettier.cmd` 启动脚本。
+
+## 使用
+
+选择 **插件 → NppFormatter → Format document**。需要快捷键时，在 **设置 → 管理快捷键（Shortcut Mapper）→ 插件命令（Plugin commands）** 中找到格式化命令并设置。
+
+| 菜单命令 | 作用 |
+|---|---|
+| Format document | 格式化当前缓冲区全文，包含尚未保存的修改 |
+| Settings... | 配置依赖路径、未保存文档的解析器和超时时间 |
+| About | 查看插件版本和运行要求 |
+
+- **已保存文档**：将文件路径传给 Prettier，用于推断解析器和查找配置。常见内置格式包括 JavaScript、TypeScript、JSON、HTML、CSS、Markdown 和 YAML。
+- **未保存文档**：在 Settings 中选择 `json`、`babel`、`typescript`、`html`、`css`、`markdown` 或 `yaml` 等解析器。此类文档没有用于查找项目配置的文件路径。
+- **选区处理**：命令仍会格式化全文；成功替换后，普通选区收拢到映射后的光标位置。原型暂不处理多光标和矩形选区。
+- **格式化期间**：修改内容、切换文档、保存，或改变光标与选区，都可能使待返回结果被丢弃。停止这些操作后重新执行即可。
+- **错误处理**：语法错误、依赖缺失或超时均保留原文。状态栏显示执行进度、忽略文件、内容未变化和结果被丢弃等状态。
+
+### 项目配置
+
+对于已保存文档，桥接脚本读取 Prettier 配置并启用 EditorConfig 支持，同时从文件目录向上查找最近的 `.prettierignore`。
+
+`.prettierrc` 示例：
+
+```json
+{
+  "singleQuote": true,
+  "semi": false,
+  "tabWidth": 2
+}
+```
+
+匹配忽略规则的文件会被跳过。默认沿用文档的 LF 或 CRLF 设置，项目配置可以覆盖该设置。JavaScript 编写的配置文件和额外的 Prettier 插件可能要求更新的 Node.js 版本或其他项目依赖。
+
+## 常见问题
+
+| 现象 | 检查方法 |
+|---|---|
+| 插件菜单中没有 NppFormatter | 确认使用 x64 Notepad++，检查 DLL 目录结构，并重启编辑器 |
+| 点击格式化后打开 Settings | 首次使用前需要配置两项依赖路径 |
+| Node.js 启动失败 | 使用 `process.execPath` 返回的实际 `node.exe` 绝对路径 |
+| Prettier 加载失败 | 选择包含 `package.json` 的 Prettier 3.x 包目录，避免选成 `prettier.cmd` |
+| 未保存文档出现语法错误 | 选择正确的解析器，或用适当扩展名保存文件 |
+| 已保存文件出现解析器或语法错误 | 检查扩展名、文件内容和项目配置 |
+| 文件被跳过，或结果被丢弃 | 检查 `.prettierignore`；停止编辑或切换文档后重新格式化 |
+| 格式化超时 | 检查项目配置和插件，按需增大超时时间 |
+| 提示需要 UTF-8 | 选择 **编码 → 转为 UTF-8 编码（Convert to UTF-8）**，然后重试 |
+| 文档或选区不符合要求 | 缓冲区保持在 8 MiB 以内，使用单个普通光标或选区 |
+
+格式化会替换整个缓冲区，书签和折叠位置可能移动；差量替换尚未实现。设置窗口的高 DPI 和读屏器表现仍需在正式发布前验证。
+
+## 配置、升级与卸载
+
+配置保存为 Notepad++ 提供的插件配置目录中的 `NppFormatter.ini`。保存已有配置时，会将上一个版本备份为 `NppFormatter.ini.bak`。关闭设置窗口后，将备份复制回 INI 即可恢复；下次格式化会重新读取。
+
+升级时先关闭 Notepad++，备份 `plugins/NppFormatter`，再复制新文件夹。回退时关闭编辑器并恢复旧文件夹。卸载时在 Notepad++ 关闭状态下移除 `plugins/NppFormatter`；个人 INI 配置可保留供重新安装使用，也可单独删除。
+
+## 从源码构建
+
+构建工具：**Zig 0.14.1**、Node.js、npm 和 Windows PowerShell。请将 `zig` 加入 `PATH`；只有编辑器冒烟测试需要 Python。
+
+在仓库根目录执行：
+
+```powershell
+npm ci
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
+```
+
+构建脚本按 `-Zig` 参数、`ZIG_EXE` 环境变量、`PATH` 的顺序查找编译器。具体安装路径在使用环境中配置，无需写入项目文档。
+
+构建脚本运行桥接测试和原生进程测试，然后生成 `dist/NppFormatter-0.1.0-x64.zip`。安装包仅包含 DLL、桥接脚本、中英文 README 和第三方许可说明；Node.js、Prettier、测试和构建工具不会打包。`npm ci` 安装的 Prettier 仅作为开发测试依赖。
+
+| 命令 | 用途 |
+|---|---|
+| `npm test` | 使用真实 Prettier 验证格式化、配置、忽略规则、Unicode 光标偏移和错误返回 |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1` | 构建 x64、运行桥接及原生测试并打包 |
+| `python tests/editor_smoke.py` | 在独立 Notepad++ 副本中测试已构建的插件 |
+
+冒烟测试通过 `NPP_EXE`、`PATH` 或标准安装位置查找 Notepad++，在自动清理的临时目录中运行独立副本，检查格式化、光标映射、撤销、无变化时的行为和过期结果保护。测试结果摘要不记录本机路径。
+
+代码分为 `src/`（原生插件与进程管理）、`bridge/`（Prettier 集成）和 `tests/`。原型每次请求启动一个 Node.js 进程，同一时间只执行一个格式化请求。
+
+## 后续计划与参与
+
+后续按以下阶段推进：
+
+1. **通用执行与工具配置**：将进程管理与 Prettier 适配器分离，定义工具标识、语言映射、程序路径、参数数组、工作目录、超时及输入输出处理方式。
+2. **接入多个适配器**：保留 Prettier 的配置查找和光标映射，再接入 clang-format 与 Ruff，验证通用执行模型。
+3. **工具选择与诊断**：增加手动选择、按语言设置默认工具、项目级覆盖、依赖发现和可操作的环境检查。
+4. **编辑器工作流**：增加选区格式化与保存时格式化，按工具能力启用，并沿用撤销和过期结果保护。
+5. **文本转换与工具串联**：扩展压缩、转换和多个工具顺序执行；所有步骤成功后，才以一次可撤销操作写入最终结果。
+
+进程复用、更多架构与编码，以及书签和折叠位置的改善留待后续。目标架构与当前原型的验收条件见源码目录中的 `docs/SPEC.md`。
+
+反馈问题时，请附上插件、Notepad++、Node.js 和 Prettier 版本，最小输入样例、相关配置、预期结果，以及完整的错误或状态消息。修改代码时运行相关测试，并同步维护两份 README。
+
+---
+
+第三方源码版本与许可说明记录在源码目录的 `third_party/README.md` 中；安装包在 `licenses/` 中附带许可文件。
