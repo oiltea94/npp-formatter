@@ -1,5 +1,15 @@
 # Changelog / 更新日志
 
+## Unreleased / 尚未发布
+
+- Format XML, SVG, XSD, XSL/XSLT, XAML, and RESX with the separately installed `@prettier/plugin-xml` package. Discover it automatically and preserve XML whitespace semantics by default.
+- Add dedicated JSONC, MDX, and Handlebars choices using Prettier's built-in parsers.
+- Explain the optional XML dependency in English, Simplified Chinese, and Traditional Chinese, including install-and-retry guidance.
+
+- 通过单独安装的 `@prettier/plugin-xml` 扩展支持 XML、SVG、XSD、XSL/XSLT、XAML 和 RESX，自动查找扩展，默认保留 XML 空白语义。
+- 新增 JSONC、MDX 和 Handlebars 独立语言选项，使用 Prettier 内置解析器。
+- 在英文、简体中文和繁体中文界面中说明 XML 可选依赖，并提供安装后重试的提示。
+
 ## 0.1.0
 
 Initial prototype for Notepad++ on Windows x86, x64, and ARM64.

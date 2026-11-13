@@ -52,6 +52,11 @@ JAVA_MISSING = {
     'zh-CN': 'Java 格式化需要 prettier-plugin-java。',
     'zh-TW': 'Java 格式化需要 prettier-plugin-java。',
 }
+XML_MISSING = {
+    'en': 'XML formatting requires @prettier/plugin-xml.',
+    'zh-CN': 'XML 格式化需要 @prettier/plugin-xml。',
+    'zh-TW': 'XML 格式化需要 @prettier/plugin-xml。',
+}
 USER32 = C.WinDLL('user32', use_last_error=True)
 KERNEL32 = C.WinDLL('kernel32', use_last_error=True)
 CALLBACK = C.WINFUNCTYPE(W.BOOL, W.HWND, W.LPARAM)
@@ -440,6 +445,9 @@ def run(sandbox, architecture, language='en'):
         print(f'PASS native UI Automation: {architecture} helper, repeated About reads', flush=True)
         assert labels['about_body'] in about_text, about_text
         assert 'prettier-plugin-java' in about_text, 'About must explain the optional Java dependency'
+        assert '@prettier/plugin-xml' in about_text, 'About must explain the optional XML dependency'
+        for name in ('JSONC', 'MDX', 'Handlebars'):
+            assert name in about_text, f'About must include {name}'
         homepage = 'https://github.com/oiltea94/npp-formatter'
         homepage_label = {'en': 'Project homepage:', 'zh-CN': '项目主页：', 'zh-TW': '專案首頁：'}[language]
         homepage_line = f'{homepage_label} <a href="{homepage}">{homepage}</a>'
@@ -745,7 +753,66 @@ def run(sandbox, architecture, language='en'):
         until(lambda: text(editor) == 'export const answer = 1;\n')
         assert ini_path.read_bytes() == settings_before_parsers
         print('PASS Java: original parse diagnostic, explicit language retry and unchanged global settings', flush=True)
-        report = {'architecture': architecture, 'language': language, 'checks': 16,
+        xml_source = '<root><item name="中文😀"/></root>'
+        xml_expected = '<root><item name="中文😀" /></root>\n'
+        new_document(xml_source, 9)  # L_XML
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        missing = until(lambda: next((w for w in windows(process.pid)
+                                     if window_class(w) == '#32770' and window_title(w) == SETTING_ERRORS[language][0]), None))
+        missing_text = automation.text(missing)
+        assert XML_MISSING[language] in missing_text, missing_text
+        assert 'npm install --global @prettier/plugin-xml' in missing_text
+        assert text(editor) == xml_source, 'Missing XML dependency changed the document'
+        USER32.PostMessageW(missing, 0x10, 0, 0)
+        until(lambda: not USER32.IsWindow(missing))
+        for package in ('@prettier/plugin-xml', '@xml-tools/parser', 'chevrotain', 'regexp-to-ast'):
+            shutil.copytree(ROOT / 'node_modules' / package, sandbox / 'node_modules' / package)
+        send(editor, 2171, 0, 0)
+        send(editor, 2025, xml_source.encode('utf-8').index('中文'.encode('utf-8')), 0)
+        format_to(xml_expected)
+        assert send(editor, 2008, 0, 0) == xml_expected.encode('utf-8').index('中文'.encode('utf-8'))
+        send(editor, 2176, 0, 0)
+        assert text(editor) == xml_source, 'XML formatting must be one undo action'
+        print('PASS XML: localized missing dependency, install and retry, host language, Unicode caret and undo', flush=True)
+
+        new_document(xml_source)
+        choose(open_picker(), 'XML')
+        until(lambda: text(editor) == xml_expected)
+        replace_part('name=', 'name = ')
+        format_to(xml_expected)
+        saved_xml = str(sandbox / 'example.xml').encode('utf-16-le') + b'\0\0'
+        assert KERNEL32.WriteProcessMemory(handle, memory, C.c_char_p(saved_xml), len(saved_xml), None)
+        assert send(main_window, 2024 + 78, 0, memory)
+        project_config.write_text('module.exports={xmlWhitespaceSensitivity:"ignore",tabWidth:4};', encoding='utf-8')
+        format_to('<root>\n    <item name="中文😀" />\n</root>\n')
+        (sandbox / '.prettierignore').write_text('example.xml\n', encoding='utf-8')
+        set_text(xml_source)
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        until(lambda: '.prettierignore' in status())
+        assert text(editor) == xml_source
+        project_config.unlink()
+        new_document('const answer=1;', 9)
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        error_dialog = wait_parse_error()
+        automation.invoke(error_dialog, PARSE_ERRORS[language][1])
+        until(lambda: 'SyntaxError' in automation.text(error_dialog))
+        assert text(editor) == 'const answer=1;'
+        USER32.PostMessageW(error_dialog, 1024 + 102, 100, 0)
+        choose(wait_picker(), 'JavaScript / JSX')
+        until(lambda: text(editor) == 'const answer = 1;\n')
+        print('PASS XML: picker memory, saved file, project config, ignore rules and explicit syntax-error recovery', flush=True)
+
+        for name, source, expected_text in (
+            ('JSONC', '// keep\n{"a":1}', '// keep\n{ "a": 1 }\n'),
+            ('MDX', '# Hello\n\n<Box a={1+2}/>', '# Hello\n\n<Box a={1 + 2} />\n'),
+            ('Handlebars', '<div>{{ name }}</div>', '<div>{{name}}</div>'),
+        ):
+            new_document(source, 58)  # Explicit override of Notepad++ JavaScript.
+            choose(open_picker(format_as_command), name)
+            until(lambda: text(editor) == expected_text)
+        assert ini_path.read_bytes() == settings_before_parsers
+        print('PASS language picker: JSONC, MDX and Handlebars without extra packages', flush=True)
+        report = {'architecture': architecture, 'language': language, 'checks': 19,
                   'live_language_switch': language == 'en', 'result': 'PASS'}
         (ROOT / 'build' / architecture / f'editor-smoke-{language}.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     finally:

@@ -30,6 +30,8 @@ Inspired by [Formatter for Sublime Text](https://packages.sublimetext.com/packag
 
 > **Current scope:** version 0.1.0 formats whole documents with Prettier. Java is available through the optional `prettier-plugin-java` package. You install the external tools yourself; the plugin neither bundles nor installs Node.js, Prettier, or language packages. More adapters and text transformations are on the [roadmap](#roadmap).
 
+> **Unreleased additions on `main`:** XML through `@prettier/plugin-xml`, plus dedicated JSONC, MDX, and Handlebars picker entries. These additions require a development build; the published 0.1.0 ZIPs do not include them.
+
 ## Why NppFormatter?
 
 | What you need | What the plugin does |
@@ -130,7 +132,7 @@ Select the Prettier directory containing `package.json`, rather than its `bin` d
 
 ## Languages
 
-The language picker offers **13 built-in choices plus Java**. Built-in formats need only Prettier; Java needs an additional package. Actual syntax support depends on your installed formatter versions.
+The development build's language picker offers **16 built-in choices plus Java and XML**. Built-in formats need only Prettier; Java and XML each need an optional package. Actual syntax support depends on your installed formatter versions.
 
 | Language / picker choice | Common saved-file extensions |
 |---|---|
@@ -138,20 +140,24 @@ The language picker offers **13 built-in choices plus Java**. Built-in formats n
 | TypeScript / TSX | `.ts`, `.mts`, `.cts`, `.tsx` |
 | JSON | `.json` |
 | JSON5 | `.json5` |
+| JSONC | `.jsonc` |
 | HTML | `.html`, `.htm` |
 | CSS | `.css` |
 | SCSS | `.scss` |
 | Less | `.less` |
 | YAML | `.yaml`, `.yml` |
 | Markdown | `.md`, `.markdown` |
+| MDX | `.mdx` |
+| Handlebars | `.hbs`, `.handlebars` |
 | GraphQL | `.graphql`, `.gql` |
 | Vue | `.vue` |
 | Angular HTML | `.component.html` |
 | **Java — optional package** | `.java` |
+| **XML — optional package** | `.xml`, `.svg`, `.xsd`, `.xsl`, `.xslt`, `.xaml`, `.resx` |
 
-**Additional saved-file formats:** Flow (`.js.flow`), JSONC (`.jsonc`), MDX (`.mdx`), Handlebars (`.hbs`, `.handlebars`), MJML (`.mjml`), PostCSS (`.pcss`, `.postcss`), and JSON.stringify-style JSON (`.importmap`). Prettier infers these from the path; they have no dedicated picker entries. Project configuration can also select a built-in parser such as `lwc`. The extensions above are examples, not an exhaustive list.
+**Additional saved-file formats:** Flow (`.js.flow`), MJML (`.mjml`), PostCSS (`.pcss`, `.postcss`), and JSON.stringify-style JSON (`.importmap`). Prettier infers these from the path; they have no dedicated picker entries. Project configuration can also select a built-in parser such as `lwc`. The extensions above are examples, not an exhaustive list.
 
-**Untitled documents:** automatic Notepad++ language mapping covers JavaScript, TypeScript, Java, JSON, JSON5, HTML, CSS, and YAML. Use **Format with language...** for other picker choices. MDX and Handlebars are distinct formats; selecting Markdown or HTML is not equivalent. C/C++ and Python formatting remain planned.
+**Untitled documents:** automatic Notepad++ language mapping covers JavaScript, TypeScript, Java, XML, JSON, JSON5, HTML, CSS, and YAML. Use **Format with language...** for other picker choices. MDX and Handlebars are distinct formats; selecting Markdown or HTML is not equivalent. C/C++ and Python formatting remain planned.
 
 ### Optional Java support
 
@@ -164,6 +170,33 @@ npm install --global prettier-plugin-java@2.11.0
 For a project-local installation, use `npm install --save-dev --save-exact prettier-plugin-java@2.11.0` in the same project as Prettier. Then open a `.java` file or select **Java** when formatting. No Java-specific project configuration is required.
 
 Saved Java files honor an explicitly configured Java parser plugin first. Otherwise, discovery checks the file's project and ancestors, the configuration location, and the selected Prettier installation. Untitled documents use the installation alongside the selected Prettier. Missing packages show an installation message and preserve the document; install and retry. A discovered package's load error is reported without silently switching to another copy.
+
+### Optional XML support (unreleased)
+
+For a global Prettier installation:
+
+```powershell
+npm install --global @prettier/plugin-xml@3.4.2
+```
+
+For a project-local installation, use `npm install --save-dev --save-exact @prettier/plugin-xml@3.4.2` in the same project as Prettier. Open an XML file, including `pom.xml` or `build.xml`, or one of the XML-based formats listed above. For an untitled document, select **XML** in Notepad++ or in **Format with language...**. No separate executable or additional path setting is needed.
+
+XML uses the same package discovery and missing-dependency behavior as Java. Explicit project plugins and parser choices take precedence. Other XML-based extensions can use the **XML** picker or a project parser override.
+
+The default `xmlWhitespaceSensitivity: "strict"` preserves meaningful whitespace inside elements, so compact XML may remain on one line. For files where that whitespace is insignificant, add an override to your Prettier configuration:
+
+```json
+{
+  "overrides": [
+    {
+      "files": "*.xml",
+      "options": { "xmlWhitespaceSensitivity": "ignore" }
+    }
+  ]
+}
+```
+
+JSONC, MDX, and Handlebars use Prettier's built-in parsers and need no additional package.
 
 ## Usage
 
@@ -228,6 +261,8 @@ Settings live in `NppFormatter.ini` in the plugin configuration directory suppli
 | Pasted code uses the wrong language | Use **Format with language...**; whole-text replacement resets remembered choices |
 | Parser or syntax error | Open the original diagnostic, correct the code, or explicitly choose another language |
 | Java package is missing | Install `prettier-plugin-java` as described above, then retry |
+| XML package is missing | Install `@prettier/plugin-xml` in the project or alongside the selected Prettier, then retry |
+| Compact XML stays on one line | XML preserves significant whitespace by default; see the XML configuration above |
 | File is ignored / result discarded | Check `.prettierignore`; retry after editing, saving, or switching documents |
 | Request times out | Inspect project configuration and plugins; adjust the request timeout if needed |
 | UTF-8 is required | Choose **Encoding → Convert to UTF-8** and retry |
@@ -256,7 +291,7 @@ The bootstrap downloads SHA-256-pinned **LLVM-MinGW 20261104 / UCRT**. The compi
 
 | Command | Purpose |
 |---|---|
-| `npm test` | Real Prettier and Java integration tests |
+| `npm test` | Real Prettier, Java, and XML integration tests |
 | `python -m unittest discover -s tests -p test_artifacts.py` | Check built DLLs and ZIP rejection cases |
 | `python -m unittest discover -s tests -p test_catalog.py` | Check catalog updates and PR reuse without API writes |
 | `python tests/download_npp.py --arch x64` | Download the hash-verified portable test editor |
@@ -307,6 +342,7 @@ Process reuse, additional encodings, and improved bookmark/folding preservation 
 - [Formatter for Sublime Text](https://packages.sublimetext.com/packages/Formatter) — inspiration for the broader tool-based workflow. NppFormatter is an independent project.
 - [Notepad++](https://notepad-plus-plus.org/) and [Prettier](https://prettier.io/) — the editor and first formatter integration.
 - [prettier-plugin-java](https://github.com/jhipster/prettier-java) — optional Java formatting.
+- [@prettier/plugin-xml](https://github.com/prettier/plugin-xml) — optional XML formatting.
 - [Awesome README](https://github.com/matiassingers/awesome-readme) — inspiration for this documentation's organization and presentation.
 
 Third-party source versions and license notices are recorded in [third_party/README.md](https://github.com/oiltea94/npp-formatter/blob/main/third_party/README.md). Install packages include the applicable notices in `licenses/`.

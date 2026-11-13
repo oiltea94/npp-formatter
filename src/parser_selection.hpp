@@ -11,6 +11,7 @@ inline const char* parserForLanguage(int language) {
     case L_JSON: return "json";
     case L_JSON5: return "json5";
     case L_HTML: return "html";
+    case L_XML: return "xml";
     case L_CSS: return "css";
     case L_YAML: return "yaml";
     default: return nullptr;
@@ -25,5 +26,6 @@ inline constexpr ParserChoice parserChoices[] = {
     {L"YAML", "yaml"}, {L"Markdown", "markdown"}, {L"GraphQL", "graphql"},
     {L"Vue", "vue"}, {L"Angular HTML", "angular"},
     {L"Java", "java"},
+    {L"XML", "xml"}, {L"JSONC", "jsonc"}, {L"MDX", "mdx"}, {L"Handlebars", "glimmer"},
 };
 } // namespace formatter

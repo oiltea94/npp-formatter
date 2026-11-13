@@ -30,6 +30,8 @@
 
 > **当前范围：** 0.1.0 原型支持使用 Prettier 格式化全文，Java 通过可选的 `prettier-plugin-java` 扩展支持。外部工具由用户自行安装；插件不捆绑或安装 Node.js、Prettier 和语言扩展包。更多适配器与文本转换功能见[路线图](#roadmap)。
 
+> **`main` 分支尚未发布的新增功能：** 通过 `@prettier/plugin-xml` 支持 XML，并新增 JSONC、MDX、Handlebars 独立语言选项。这些功能需使用开发构建，已发布的 0.1.0 安装包尚未包含。
+
 ## 为什么使用 NppFormatter？
 
 | 你的需要 | 插件如何处理 |
@@ -134,7 +136,7 @@ node -p "require('path').dirname(require.resolve('prettier/package.json'))"
 
 ## 支持的语言
 
-语言选择器提供 **13 个内置选项及 Java**。内置格式只需 Prettier；Java 需要额外的扩展包。具体语法支持取决于安装的格式化工具版本。
+开发构建的语言选择器提供 **16 个内置选项，以及 Java 和 XML**。内置格式只需 Prettier；Java 和 XML 各需一个可选扩展包。具体语法支持取决于安装的格式化工具版本。
 
 | 语言 / 选择器选项 | 常见已保存文件扩展名 |
 |---|---|
@@ -142,20 +144,24 @@ node -p "require('path').dirname(require.resolve('prettier/package.json'))"
 | TypeScript / TSX | `.ts`、`.mts`、`.cts`、`.tsx` |
 | JSON | `.json` |
 | JSON5 | `.json5` |
+| JSONC | `.jsonc` |
 | HTML | `.html`、`.htm` |
 | CSS | `.css` |
 | SCSS | `.scss` |
 | Less | `.less` |
 | YAML | `.yaml`、`.yml` |
 | Markdown | `.md`、`.markdown` |
+| MDX | `.mdx` |
+| Handlebars | `.hbs`、`.handlebars` |
 | GraphQL | `.graphql`、`.gql` |
 | Vue | `.vue` |
 | Angular HTML | `.component.html` |
 | **Java — 可选扩展包** | `.java` |
+| **XML — 可选扩展包** | `.xml`、`.svg`、`.xsd`、`.xsl`、`.xslt`、`.xaml`、`.resx` |
 
-**已保存文件还支持：** Flow（`.js.flow`）、JSONC（`.jsonc`）、MDX（`.mdx`）、Handlebars（`.hbs`、`.handlebars`）、MJML（`.mjml`）、PostCSS（`.pcss`、`.postcss`）和 JSON.stringify 风格的 JSON（`.importmap`）。这些格式由 Prettier 根据路径推断，选择器中暂未提供独立选项。项目配置也可显式指定 `lwc` 等内置解析器。上表仅列出常见扩展名。
+**已保存文件还支持：** Flow（`.js.flow`）、MJML（`.mjml`）、PostCSS（`.pcss`、`.postcss`）和 JSON.stringify 风格的 JSON（`.importmap`）。这些格式由 Prettier 根据路径推断，选择器中暂未提供独立选项。项目配置也可显式指定 `lwc` 等内置解析器。上表仅列出常见扩展名。
 
-**未保存文档：** 自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、Java、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可通过**按指定语言格式化...** 使用。MDX 和 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。C/C++ 和 Python 格式化仍在规划中。
+**未保存文档：** 自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、Java、XML、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可通过**按指定语言格式化...** 使用。MDX 和 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。C/C++ 和 Python 格式化仍在规划中。
 
 ### 可选的 Java 支持
 
@@ -168,6 +174,33 @@ npm install --global prettier-plugin-java@2.11.0
 项目内安装时，在安装 Prettier 的同一项目中执行 `npm install --save-dev --save-exact prettier-plugin-java@2.11.0`。随后打开 `.java` 文件，或在格式化时选择 **Java**。无需编写 Java 专用项目配置。
 
 已保存的 Java 文件优先使用项目配置显式指定的 Java 解析器插件；否则依次查找文件所属项目及上级目录、配置文件位置、所选 Prettier 的安装位置。未保存文档使用所选 Prettier 同一位置的安装。依赖缺失时显示安装提示并保留原文，安装后重试即可。已找到的包加载失败时，报告原始错误，不会悄悄换用其他副本。
+
+### 可选的 XML 支持（尚未发布）
+
+如果 Prettier 是全局安装：
+
+```powershell
+npm install --global @prettier/plugin-xml@3.4.2
+```
+
+项目内安装时，在安装 Prettier 的同一项目中执行 `npm install --save-dev --save-exact @prettier/plugin-xml@3.4.2`。随后打开 XML 文件（包括 `pom.xml`、`build.xml`），或上表中的其他 XML 格式文件。未保存文档可在 Notepad++ 或**按指定语言格式化...** 中选择 **XML**。无需安装独立可执行工具，也无需新增路径配置。
+
+XML 沿用 Java 的扩展查找顺序和缺失提示，优先遵循项目显式配置的插件和解析器。其他 XML 格式的扩展名可通过 **XML** 语言选项或项目解析器配置处理。
+
+默认的 `xmlWhitespaceSensitivity: "strict"` 会保留元素内有意义的空白，因此紧凑 XML 可能仍保持单行。对于这些空白不影响含义的文件，可在 Prettier 配置中加入覆盖规则：
+
+```json
+{
+  "overrides": [
+    {
+      "files": "*.xml",
+      "options": { "xmlWhitespaceSensitivity": "ignore" }
+    }
+  ]
+}
+```
+
+JSONC、MDX 和 Handlebars 使用 Prettier 内置解析器，无需额外安装扩展包。
 
 <a id="usage"></a>
 
@@ -236,6 +269,8 @@ npm install --global prettier-plugin-java@2.11.0
 | 粘贴代码后选错了语言 | 使用**按指定语言格式化...**；整篇替换会清除记住的选择 |
 | 解析器或语法报错 | 查看原始诊断，修正代码，或显式选择其他语言 |
 | 提示缺少 Java 扩展包 | 按上文安装 `prettier-plugin-java` 后重试 |
+| 提示缺少 XML 扩展包 | 在项目内或所选 Prettier 的同一位置安装 `@prettier/plugin-xml` 后重试 |
+| 紧凑 XML 格式化后仍是单行 | 默认保留有意义的空白；参见上面的 XML 配置说明 |
 | 文件被忽略 / 结果被丢弃 | 检查 `.prettierignore`；完成编辑、保存或切换文档后重试 |
 | 请求超时 | 检查项目配置和插件，按需调整请求超时 |
 | 提示需要 UTF-8 | 选择**编码 → 转为 UTF-8 编码**后重试 |
@@ -266,7 +301,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architect
 
 | 命令 | 用途 |
 |---|---|
-| `npm test` | 使用真实 Prettier 和 Java 扩展验证集成 |
+| `npm test` | 使用真实 Prettier、Java 和 XML 扩展验证集成 |
 | `python -m unittest discover -s tests -p test_artifacts.py` | 检查已构建的 DLL、ZIP 和错误产物拒绝情况 |
 | `python -m unittest discover -s tests -p test_catalog.py` | 验证目录更新和 PR 复用，不写入 GitHub API |
 | `python tests/download_npp.py --arch x64` | 下载经过哈希校验的便携测试编辑器 |
@@ -319,6 +354,7 @@ DLL 和“关于”窗口的版本统一来自 `package.json`。打标签前补�
 - [Sublime Text 的 Formatter](https://packages.sublimetext.com/packages/Formatter)：多工具工作流的灵感来源。NppFormatter 是独立项目。
 - [Notepad++](https://notepad-plus-plus.org/) 与 [Prettier](https://prettier.io/)：编辑器和首个格式化工具接入。
 - [prettier-plugin-java](https://github.com/jhipster/prettier-java)：可选的 Java 格式化支持。
+- [@prettier/plugin-xml](https://github.com/prettier/plugin-xml)：可选的 XML 格式化支持。
 - [Awesome README](https://github.com/matiassingers/awesome-readme)：本文档结构与呈现方式的参考。
 
 第三方源码版本与许可说明见 [third_party/README.md](https://github.com/oiltea94/npp-formatter/blob/main/third_party/README.md)。安装包在 `licenses/` 中附带相应说明。

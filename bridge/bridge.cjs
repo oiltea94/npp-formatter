@@ -81,34 +81,39 @@ function nearestIgnore(filePath) {
   }
 }
 
-const javaPluginName = 'prettier-plugin-java';
+const optionalPlugins = [
+  { parser: 'java', name: 'prettier-plugin-java', code: 'MISSING_JAVA_PLUGIN', extensions: ['.java'] },
+  { parser: 'xml', name: '@prettier/plugin-xml', code: 'MISSING_XML_PLUGIN',
+    extensions: ['.xml', '.svg', '.xsd', '.xsl', '.xslt', '.xaml', '.resx'] },
+];
 
-function resolveJavaPlugin(fromFiles) {
+function resolveOptionalPlugin(dependency, fromFiles) {
   for (const from of new Set(fromFiles.filter(Boolean))) {
     const resolver = createRequire(from);
-    try { return resolver.resolve(javaPluginName); }
+    try { return resolver.resolve(dependency.name); }
     catch (error) {
-      const installed = resolver.resolve.paths(javaPluginName).some(root => fs.existsSync(path.join(root, javaPluginName)));
+      const installed = resolver.resolve.paths(dependency.name).some(root => fs.existsSync(path.join(root, dependency.name)));
       if (error.code !== 'MODULE_NOT_FOUND' || installed) throw error;
     }
   }
-  const error = new Error('Install prettier-plugin-java in the project or alongside the configured Prettier package.');
-  error.code = 'MISSING_JAVA_PLUGIN';
+  const error = new Error(`Install ${dependency.name} in the project or alongside the configured Prettier package.`);
+  error.code = dependency.code;
   throw error;
 }
 
-async function addJavaPlugin(plugins, fromFiles) {
-  // Respect project-supplied Java parsers, including plugin objects and custom paths.
+async function addOptionalPlugin(dependency, plugins, fromFiles) {
+  // Respect project-supplied parsers, including plugin objects and custom paths.
   for (let i = 0; i < plugins.length; ++i) {
     if (typeof plugins[i] === 'string') {
       const imported = await import(pathToFileURL(plugins[i]).href);
       plugins[i] = imported.default ?? imported;
     }
-    if (plugins[i]?.parsers?.java) return;
+    if (plugins[i]?.parsers?.[dependency.parser]) return;
   }
-  const imported = await import(pathToFileURL(resolveJavaPlugin(fromFiles)).href);
+  const imported = await import(pathToFileURL(resolveOptionalPlugin(dependency, fromFiles)).href);
   const plugin = imported.default ?? imported;
-  if (!plugin.parsers?.java) throw new Error('The installed prettier-plugin-java does not provide a Java parser.');
+  if (!plugin.parsers?.[dependency.parser])
+    throw new Error(`The installed ${dependency.name} does not provide a ${dependency.parser} parser.`);
   plugins.push(plugin);
 }
 
@@ -159,12 +164,17 @@ async function run(request) {
   const plugins = (config?.plugins ?? []).map((plugin) => {
     if (typeof plugin !== 'string') return plugin;
     const from = configFile ?? filePath ?? packageFile;
-    if (plugin === javaPluginName) return resolveJavaPlugin([from, packageFile]);
+    const dependency = optionalPlugins.find(item => item.name === plugin);
+    if (dependency) return resolveOptionalPlugin(dependency, [from, packageFile]);
     return createRequire(from).resolve(plugin);
   });
-  if (!parser && !config?.parser && filePath && path.extname(filePath).toLowerCase() === '.java') parser = 'java';
+  if (!parser && !config?.parser && filePath) {
+    const extension = path.extname(filePath).toLowerCase();
+    parser = optionalPlugins.find(item => item.extensions.includes(extension))?.parser;
+  }
   const java = (parser ?? config?.parser) === 'java';
-  if (java) await addJavaPlugin(plugins, [filePath, configFile, packageFile]);
+  const dependency = optionalPlugins.find(item => item.parser === (parser ?? config?.parser));
+  if (dependency) await addOptionalPlugin(dependency, plugins, [filePath, configFile, packageFile]);
   const options = {
     endOfLine: request.endOfLine ?? 'auto', ...config, plugins,
     filepath: filePath, cursorOffset: request.cursorOffset,

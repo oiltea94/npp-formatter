@@ -79,6 +79,12 @@ Implemented slices:
    Prettier installation. Untitled documents use the latter location. Localize
    missing-dependency guidance, preserve load errors, and offer explicit language
    recovery for Java parse failures. Never bundle or install the optional package.
+7. XML support (unreleased): reuse optional package discovery for
+   @prettier/plugin-xml. Recognize .xml, .svg, .xsd, .xsl, .xslt, .xaml, and .resx,
+   the Notepad++ XML language, and the XML picker entry. Preserve the plugin's
+   strict whitespace default; honor project overrides. Localize missing-package
+   guidance and preserve the document on errors. Add dedicated JSONC, MDX, and
+   Handlebars entries backed by Prettier's built-in jsonc, mdx, and glimmer parsers.
 
 The supported build targets are Notepad++ x86, x64, and ARM64 with UTF-8 Scintilla buffers. Existing non-UTF-8
 buffers receive a clear message asking the user to convert the encoding first.
@@ -122,6 +128,9 @@ publishing externally or replacing an existing user installation.
 - Respect a project's config and nearest .prettierignore for a saved file.
 - Format Java with the optional package; retain original text on missing or
   broken dependencies, and allow retry after installation without restarting.
+- Apply the same dependency behavior to XML. Preserve mixed text, entities,
+  CDATA, Unicode cursor positions, and LF/CRLF; follow project whitespace options.
+- Exercise XML and the JSONC/MDX/Handlebars picker entries in the real editor.
 - Error/timeout/invalid response/stale result leaves original text untouched.
 - One undo restores the previous text; a no-op leaves the undo stack untouched.
 - Editor remains responsive while a child process is running.

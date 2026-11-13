@@ -7,6 +7,18 @@ const os = require('node:os');
 const bridge = path.resolve(__dirname, '../bridge/bridge.cjs');
 const prettierPath = path.dirname(require.resolve('prettier/package.json'));
 
+test('formats JSONC, MDX and Handlebars with the built-in parsers', () => {
+  for (const [parser, text, expected] of [
+    ['jsonc', '// keep\n{"a":1}', '// keep\n{ "a": 1 }\n'],
+    ['mdx', '# Hello\n\n<Box a={1+2}/>', '# Hello\n\n<Box a={1 + 2} />\n'],
+    ['glimmer', '<div>{{ name }}</div>', '<div>{{name}}</div>'],
+  ]) {
+    const result = invoke({ parser, text });
+    assert.equal(result.ok, true, result.error);
+    assert.equal(result.formatted, expected);
+  }
+});
+
 function invoke(overrides, raw, env = process.env) {
   const request = { text: '{"中文":"😀","a":1}', parser: 'json',
     prettierPath, cursorOffset: 0, ...overrides };
