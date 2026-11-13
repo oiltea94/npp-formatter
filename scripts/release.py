@@ -113,7 +113,7 @@ def build_entry(version, arch, digest, repository=REPOSITORY):
         'repository': f'{homepage}/releases/download/v{version}/NppFormatter-{version}-{arch}-plugin-admin.zip',
         'description': 'Format documents with Prettier or Python with Ruff and project configuration. Optional Java, XML, PHP, '
                        'SQL, Properties, TOML and Shell packages. Includes environment checks. '
-                       'Requires separately installed Node.js, Prettier and language packages.',
+                       'Install Ruff for Python; install Node.js, Prettier and optional packages for Prettier languages.',
         'author': 'OILTEA', 'homepage': homepage,
     }
 
