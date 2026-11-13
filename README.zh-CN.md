@@ -9,7 +9,7 @@
   <a href="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml"><img src="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml/badge.svg?branch=main" alt="Windows 构建与发布检查"></a>
   <img src="https://img.shields.io/badge/Windows-x86%20%7C%20x64%20%7C%20ARM64-0078D4" alt="Windows x86、x64 和 ARM64">
   <img src="https://img.shields.io/badge/Prettier-3.x-F7B93E?logo=prettier&amp;logoColor=white" alt="Prettier 3.x">
-  <img src="https://img.shields.io/badge/status-0.3.0%20prototype-DA8B24" alt="0.3.0 原型版本">
+  <img src="https://img.shields.io/badge/status-0.4.0%20prototype-DA8B24" alt="0.4.0 原型版本">
 </p>
 
 <p align="center"><a href="README.md">English</a> · <strong>简体中文</strong></p>
@@ -26,11 +26,9 @@
   <img src="https://raw.githubusercontent.com/oiltea94/npp-formatter/main/docs/assets/formatting-preview.svg" width="1040" alt="JavaScript 格式化示例：紧凑的 sum 函数经过 Prettier 格式化后，具有一致的空格、换行和缩进。">
 </p>
 
-灵感来自 [Sublime Text 的 Formatter](https://packages.sublimetext.com/packages/Formatter)。NppFormatter 希望将多种格式化与文本转换工具接入 Notepad++，通过统一配置使用。**开发分支已接入 Prettier、Ruff 和 clang-format。**
+灵感来自 [Sublime Text 的 Formatter](https://packages.sublimetext.com/packages/Formatter)。NppFormatter 希望将多种格式化与文本转换工具接入 Notepad++，通过统一配置使用。**目前已接入 Prettier、Ruff 和 clang-format。**
 
-> **开发状态：** C/C++ 支持属于尚未发布的 0.4.0 源码。下方已发布的 0.3.0 安装包包含 Prettier 和 Ruff；下个版本发布前，可从源码构建体验 clang-format。
-
-> **当前范围：** 0.4.0 开发版支持使用 Prettier、Ruff 或 clang-format 格式化全文，提供 16 个 Prettier 内置语言选项、7 种 Prettier 可选语言、Ruff Python 和 clang-format C/C++ 支持，以及各工具的独立环境检查。外部工具由用户自行安装；插件不捆绑或安装 Node.js、Prettier、Ruff、clang-format 和语言扩展包。更多适配器与文本转换功能见[路线图](#roadmap)。
+> **当前范围：** 0.4.0 支持使用 Prettier、Ruff 或 clang-format 格式化全文，提供 16 个 Prettier 内置语言选项、7 种 Prettier 可选语言、Ruff Python 和 clang-format C/C++ 支持，以及各工具的独立环境检查。外部工具由用户自行安装；插件不捆绑或安装 Node.js、Prettier、Ruff、clang-format 和语言扩展包。更多适配器与文本转换功能见[路线图](#roadmap)。
 
 ## 为什么使用 NppFormatter？
 
@@ -88,11 +86,11 @@ npm install --global prettier@3
 2. 在 **Artifacts** 中下载并解压 **release-assets**。
 3. 选择与 **Notepad++ 架构**一致的 ZIP，再解压这份安装包。
 
-| 你的 Notepad++ | 0.3.0 手动安装包 |
+| 你的 Notepad++ | 0.4.0 手动安装包 |
 |---|---|
-| x86 / 32 位 | `NppFormatter-0.3.0-x86.zip` |
-| x64 / 64 位 | `NppFormatter-0.3.0-x64.zip` |
-| ARM64 | `NppFormatter-0.3.0-arm64.zip` |
+| x86 / 32 位 | `NppFormatter-0.4.0-x86.zip` |
+| x64 / 64 位 | `NppFormatter-0.4.0-x64.zip` |
+| ARM64 | `NppFormatter-0.4.0-arm64.zip` |
 
 64 位 Windows 上运行的 32 位 Notepad++ 仍需选择 **x86**。Node.js 作为独立进程运行，只需兼容当前 Windows，其架构无需与插件一致。CI 使用 Notepad++ **8.9.6** 测试全部三种架构。
 

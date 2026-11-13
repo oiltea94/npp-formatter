@@ -9,7 +9,7 @@
   <a href="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml"><img src="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml/badge.svg?branch=main" alt="Windows build and release checks"></a>
   <img src="https://img.shields.io/badge/Windows-x86%20%7C%20x64%20%7C%20ARM64-0078D4" alt="Windows x86, x64 and ARM64">
   <img src="https://img.shields.io/badge/Prettier-3.x-F7B93E?logo=prettier&amp;logoColor=white" alt="Prettier 3.x">
-  <img src="https://img.shields.io/badge/status-0.3.0%20prototype-DA8B24" alt="Version 0.3.0 prototype">
+  <img src="https://img.shields.io/badge/status-0.4.0%20prototype-DA8B24" alt="Version 0.4.0 prototype">
 </p>
 
 <p align="center"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
@@ -26,11 +26,9 @@
   <img src="https://raw.githubusercontent.com/oiltea94/npp-formatter/main/docs/assets/formatting-preview.svg" width="1040" alt="JavaScript example: a compact sum function becomes consistently spaced and indented after formatting with Prettier.">
 </p>
 
-Inspired by [Formatter for Sublime Text](https://packages.sublimetext.com/packages/Formatter), NppFormatter is building toward a configurable home for formatting and text transformation tools in Notepad++. **The development branch integrates Prettier, Ruff and clang-format.**
+Inspired by [Formatter for Sublime Text](https://packages.sublimetext.com/packages/Formatter), NppFormatter is building toward a configurable home for formatting and text transformation tools in Notepad++. **NppFormatter integrates Prettier, Ruff and clang-format.**
 
-> **Development status:** C/C++ support is new in the unreleased 0.4.0 source. The published 0.3.0 packages listed below include Prettier and Ruff. Build from source to try clang-format before the next release.
-
-> **Current scope:** the 0.4.0 development version formats whole documents with Prettier, Ruff or clang-format: 16 built-in Prettier choices, 7 optional Prettier languages, Python through Ruff, and C/C++ through clang-format, with independent environment checks. You install the external tools yourself; the plugin neither bundles nor installs Node.js, Prettier, Ruff, clang-format, or language packages. More adapters and text transformations are on the [roadmap](#roadmap).
+> **Current scope:** version 0.4.0 formats whole documents with Prettier, Ruff or clang-format: 16 built-in Prettier choices, 7 optional Prettier languages, Python through Ruff, and C/C++ through clang-format, with independent environment checks. You install the external tools yourself; the plugin neither bundles nor installs Node.js, Prettier, Ruff, clang-format, or language packages. More adapters and text transformations are on the [roadmap](#roadmap).
 
 ## Why NppFormatter?
 
@@ -86,11 +84,11 @@ Use a manual-install ZIP from [Releases](https://github.com/oiltea94/npp-formatt
 2. Under **Artifacts**, download and extract **release-assets**.
 3. Choose the ZIP matching **Notepad++'s architecture**, then extract that ZIP too.
 
-| Your Notepad++ | Manual-install ZIP for 0.3.0 |
+| Your Notepad++ | Manual-install ZIP for 0.4.0 |
 |---|---|
-| x86 / 32-bit | `NppFormatter-0.3.0-x86.zip` |
-| x64 / 64-bit | `NppFormatter-0.3.0-x64.zip` |
-| ARM64 | `NppFormatter-0.3.0-arm64.zip` |
+| x86 / 32-bit | `NppFormatter-0.4.0-x86.zip` |
+| x64 / 64-bit | `NppFormatter-0.4.0-x64.zip` |
+| ARM64 | `NppFormatter-0.4.0-arm64.zip` |
 
 32-bit Notepad++ on 64-bit Windows still needs **x86**. Node.js runs as a separate process and only needs to be compatible with Windows; its architecture need not match the plugin. CI tests the plugin with Notepad++ **8.9.6** on all three architectures.
 

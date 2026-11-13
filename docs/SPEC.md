@@ -8,7 +8,7 @@ inspired by Formatter for Sublime Text. Multiple external tools, configuration-b
 extension, and language-specific workflows are the target; Prettier is the first
 adapter. External formatters and their runtimes are installed by the user.
 
-This document distinguishes the implemented 0.4.0 development integration of Prettier, Ruff and clang-format from planned
+This document distinguishes the implemented 0.4.0 integration of Prettier, Ruff and clang-format from planned
 capabilities. The target architecture below is a plan, not current functionality.
 
 ## Target architecture (planned)
