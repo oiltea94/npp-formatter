@@ -10,6 +10,7 @@
 #include "json.hpp"
 #include "bridge_process.hpp"
 #include "dependency_discovery.hpp"
+#include "ruff_adapter.hpp"
 #include "i18n.hpp"
 #include "parser_selection.hpp"
 
@@ -28,7 +29,7 @@ std::thread worker;
 std::atomic<bool> cancelled{false}, finished{false};
 uint64_t generation = 0;
 bool shuttingDown = false;
-struct Settings { std::wstring node, prettier, sqlDialect = L"sql"; int shellDialect = 1; DWORD timeoutMs = 10000; };
+struct Settings { std::wstring node, prettier, ruff, sqlDialect = L"sql"; int shellDialect = 1; DWORD timeoutMs = 10000; };
 Settings settings;
 struct DocumentParser { std::string parser; LRESULT document; };
 std::unordered_map<UINT_PTR, DocumentParser> documentParsers;
@@ -84,6 +85,7 @@ std::wstring readSetting(const wchar_t* key, const wchar_t* fallback) {
 void loadSettings() {
     settings.node = readSetting(L"NodePath", L"");
     settings.prettier = readSetting(L"PrettierPath", L"");
+    settings.ruff = readSetting(L"RuffPath", L"");
     settings.sqlDialect = formatter::sqlDialects[formatter::sqlDialectIndex(readSetting(L"SqlDialect", L"sql"))].value;
     settings.shellDialect = formatter::shellDialects[formatter::shellDialectIndex(
         GetPrivateProfileIntW(L"Formatter", L"ShellDialect", 1, configPath.c_str()))].value;
@@ -101,6 +103,7 @@ void saveSettings(const Settings& next) {
             throw std::runtime_error(utf8(tr(Text::WriteSettingsError)));
     };
     write(L"NodePath", next.node); write(L"PrettierPath", next.prettier);
+    write(L"RuffPath", next.ruff);
     write(L"TimeoutMs", std::to_wstring(next.timeoutMs));
     write(L"SqlDialect", next.sqlDialect);
     write(L"ShellDialect", std::to_wstring(next.shellDialect));
@@ -120,16 +123,17 @@ void addControl(HWND parent, const wchar_t* kind, const wchar_t* text,
         parent, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance, nullptr);
     SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)), TRUE);
 }
-void browse(HWND window, bool node) {
+void browse(HWND window, int field) {
+    bool node = field == 101, ruff = field == 109;
     wchar_t path[32768]{};
     OPENFILENAMEW dialog{};
     dialog.lStructSize = sizeof(dialog); dialog.hwndOwner = window;
     dialog.lpstrFile = path; dialog.nMaxFile = 32768;
-    dialog.lpstrFilter = tr(node ? Text::NodeFilter : Text::PrettierFilter);
+    dialog.lpstrFilter = tr(ruff ? Text::RuffFilter : node ? Text::NodeFilter : Text::PrettierFilter);
     dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     if (GetOpenFileNameW(&dialog)) {
-        std::wstring selected = node ? std::wstring(path) : fs::path(path).parent_path().wstring();
-        SetDlgItemTextW(window, node ? 101 : 102, selected.c_str());
+        std::wstring selected = (node || ruff) ? std::wstring(path) : fs::path(path).parent_path().wstring();
+        SetDlgItemTextW(window, field, selected.c_str());
     }
 }
 void setDetectionStatus(HWND window, Text key, const std::wstring& details = {}) {
@@ -143,13 +147,14 @@ void showEnvironmentReport(HWND window) {
     if (environmentReport.is_null()) { SetDlgItemTextW(window, 108, L""); return; }
     const auto& report = environmentReport;
     auto state = [&](const json& item) {
-        auto value = item.value("status", "error");
+        auto value = item.value("status", item.contains("version") ? "available" : "error");
         return tr(value == "available" ? Text::EnvironmentAvailable :
                   value == "missing" ? Text::EnvironmentMissing : Text::EnvironmentError);
     };
-    std::wstring text = L"Node.js: " + wide(report.at("node").at("version").get<std::string>()) +
-        L" (" + wide(report.at("node").at("arch").get<std::string>()) + L")\r\n" +
-        wide(report.at("node").at("path").get<std::string>()) + L"\r\n";
+    const auto& node = report.at("node");
+    std::wstring text = L"Node.js: " + std::wstring(state(node)) + L" " + wide(node.value("version", "")) +
+        L" (" + wide(node.value("arch", "")) + L")\r\n" + wide(node.value("path", "")) + L"\r\n";
+    if (node.contains("error")) text += wide(node.at("error").get<std::string>()) + L"\r\n";
     const auto& prettier = report.at("prettier");
     text += L"Prettier: " + std::wstring(state(prettier)) + L" " + wide(prettier.value("version", "")) + L"\r\n";
     text += wide(prettier.value("path", "")) + L"\r\n";
@@ -159,7 +164,9 @@ void showEnvironmentReport(HWND window) {
     if (prettier.value("status", "") == "available" && !report.contains("configError"))
         text += std::wstring(tr(Text::EnvironmentBuiltins)) + L"\r\n";
     else text += std::wstring(tr(Text::EnvironmentNotChecked)) + L"\r\n";
-    for (const auto& item : report.at("plugins")) {
+    auto tools = report.at("plugins");
+    if (report.contains("ruff")) tools.push_back(report.at("ruff"));
+    for (const auto& item : tools) {
         text += wide(item.at("name").get<std::string>()) + L": " + state(item) +
             L" " + wide(item.value("version", "")) + L"\r\n";
         if (item.contains("path")) text += wide(item.at("path").get<std::string>()) + L"\r\n";
@@ -172,7 +179,7 @@ void updateSettingsLanguage(HWND window) {
     const std::pair<int, Text> controls[] = {
         {301, Text::NodeLabel}, {302, Text::PrettierLabel}, {304, Text::TimeoutLabel}, {306, Text::SqlDialectLabel}, {307, Text::ShellDialectLabel},
         {201, Text::Browse}, {202, Text::Browse}, {203, Text::Detect}, {204, Text::Detect},
-        {205, Text::EnvironmentCheck},
+        {205, Text::EnvironmentCheck}, {309, Text::RuffLabel}, {209, Text::Browse}, {210, Text::Detect},
         {IDOK, Text::Save}, {IDCANCEL, Text::Cancel}
     };
     for (auto [id, key] : controls) SetDlgItemTextW(window, id, tr(key));
@@ -211,7 +218,7 @@ void refreshLanguage() {
     if (lastStatus != Text::Empty) status(lastStatus);
 }
 void detectionControls(HWND window, bool enabled) {
-    for (int id : {101, 102, 201, 202, 203, 204, 205, IDOK})
+    for (int id : {101, 102, 109, 201, 202, 203, 204, 205, 209, 210, IDOK})
         EnableWindow(GetDlgItem(window, id), enabled);
 }
 void stopDetection() {
@@ -221,10 +228,11 @@ void stopDetection() {
 }
 void startDetection(HWND window, int action) {
     if (detectionWorker.joinable()) return;
-    const bool node = action == 203, environment = action == 205;
+    const bool node = action == 203, environment = action == 205, ruff = action == 210;
+    auto selectedRuff = controlText(window, 109);
     auto selectedNode = controlText(window, 101);
     auto selectedPrettier = controlText(window, 102);
-    if (!node && (selectedNode.empty() || !fs::path(selectedNode).is_absolute() || !fs::is_regular_file(selectedNode))) {
+    if (!node && !ruff && !environment && (selectedNode.empty() || !fs::path(selectedNode).is_absolute() || !fs::is_regular_file(selectedNode))) {
         setDetectionStatus(window, Text::NodeFirst);
         return;
     }
@@ -235,21 +243,39 @@ void startDetection(HWND window, int action) {
     detectionCancelled = false; detectionFinished = false;
     if (!SetTimer(window, 2, 50, nullptr)) throw std::runtime_error(utf8(tr(Text::DetectionTimerError)));
     try {
-        detectionWorker = std::thread([node, environment, selectedNode, selectedPrettier, filePath, bridge] {
-            DetectionResult result{environment ? 108 : node ? 101 : 102, {}, {}};
+        detectionWorker = std::thread([node, environment, ruff, selectedRuff, selectedNode, selectedPrettier, filePath, bridge] {
+            DetectionResult result{environment ? 108 : ruff ? 109 : node ? 101 : 102, {}, {}};
             try {
-                if (node) result.path = formatter::detectNode(selectedNode, bridge, detectionCancelled);
+                if (ruff) result.path = formatter::detectRuff(selectedRuff, filePath, detectionCancelled);
+                else if (environment) {
+                    json report{{"node", {{"status", "missing"}, {"path", utf8(selectedNode)}}},
+                                {"prettier", {{"status", "missing"}, {"path", utf8(selectedPrettier)}}}, {"plugins", json::array()}};
+                    if (!selectedNode.empty()) {
+                        try {
+                            json request{{"operation", "checkEnvironment"}, {"prettierPath", utf8(selectedPrettier)}};
+                            if (!filePath.empty()) request["filePath"] = utf8(filePath);
+                            auto process = formatter::runBridge(selectedNode, bridge, request.dump(), 30000, detectionCancelled);
+                            auto response = json::parse(process.output);
+                            if (process.exitCode || !response.value("ok", false)) throw std::runtime_error(response.value("error", "Node.js environment check failed."));
+                            report = std::move(response);
+                        } catch (const std::exception& error) {
+                            report["node"]["status"] = "error";
+                            report["node"]["error"] = error.what();
+                        }
+                    }
+                    if (!detectionCancelled) report["ruff"] = formatter::checkRuff(selectedRuff, filePath, detectionCancelled);
+                    report["document"] = utf8(filePath);
+                    result.report = std::move(report);
+                }
+                else if (node) result.path = formatter::detectNode(selectedNode, bridge, detectionCancelled);
                 else {
-                    json request{{"operation", environment ? "checkEnvironment" : "detectPrettier"}, {"prettierPath", utf8(selectedPrettier)}};
+                    json request{{"operation", "detectPrettier"}, {"prettierPath", utf8(selectedPrettier)}};
                     if (!filePath.empty()) request["filePath"] = utf8(filePath);
-                    auto process = formatter::runBridge(selectedNode, bridge, request.dump(), environment ? 30000 : 10000, detectionCancelled);
+                    auto process = formatter::runBridge(selectedNode, bridge, request.dump(), 10000, detectionCancelled);
                     auto response = json::parse(process.output);
                     if (process.exitCode != 0 || !response.value("ok", false))
                         throw std::runtime_error(response.value("error", "Prettier detection failed."));
-                    if (environment) {
-                        response["document"] = utf8(filePath);
-                        result.report = std::move(response);
-                    } else result.path = wide(response.at("prettierPath").get<std::string>());
+                    result.path = wide(response.at("prettierPath").get<std::string>());
                 }
             } catch (const std::exception& error) {
                 try { result.error = wide(error.what()); }
@@ -262,7 +288,7 @@ void startDetection(HWND window, int action) {
     detectionControls(window, false);
     environmentReport = nullptr;
     showEnvironmentReport(window);
-    setDetectionStatus(window, environment ? Text::CheckingEnvironment : node ? Text::DetectNode : Text::DetectPrettier);
+    setDetectionStatus(window, environment ? Text::CheckingEnvironment : ruff ? Text::DetectRuff : node ? Text::DetectNode : Text::DetectPrettier);
 }
 LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
     try {
@@ -275,24 +301,28 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
             addControl(window, L"EDIT", settings.prettier.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 104, 480, 26, 102);
             addControl(window, L"BUTTON", tr(Text::Browse), WS_TABSTOP, 504, 104, 96, 26, 202);
             addControl(window, L"BUTTON", tr(Text::Detect), WS_TABSTOP, 608, 104, 100, 26, 204);
-            addControl(window, L"STATIC", tr(Text::TimeoutLabel), 0, 16, 144, 420, 20, 304);
-            addControl(window, L"EDIT", std::to_wstring(settings.timeoutMs).c_str(), WS_TABSTOP | ES_NUMBER, 450, 140, 150, 26, 104);
-            addControl(window, L"STATIC", tr(Text::SqlDialectLabel), 0, 16, 184, 420, 20, 306);
-            addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 450, 180, 258, 300, 106);
+            addControl(window, L"STATIC", tr(Text::RuffLabel), 0, 16, 144, 692, 20, 309);
+            addControl(window, L"EDIT", settings.ruff.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 168, 480, 26, 109);
+            addControl(window, L"BUTTON", tr(Text::Browse), WS_TABSTOP, 504, 168, 96, 26, 209);
+            addControl(window, L"BUTTON", tr(Text::Detect), WS_TABSTOP, 608, 168, 100, 26, 210);
+            addControl(window, L"STATIC", tr(Text::TimeoutLabel), 0, 16, 208, 420, 20, 304);
+            addControl(window, L"EDIT", std::to_wstring(settings.timeoutMs).c_str(), WS_TABSTOP | ES_NUMBER, 450, 204, 150, 26, 104);
+            addControl(window, L"STATIC", tr(Text::SqlDialectLabel), 0, 16, 248, 420, 20, 306);
+            addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 450, 244, 258, 300, 106);
             for (const auto& dialect : formatter::sqlDialects)
                 SendDlgItemMessageW(window, 106, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(dialect.label));
             SendDlgItemMessageW(window, 106, CB_SETCURSEL, formatter::sqlDialectIndex(settings.sqlDialect), 0);
-            addControl(window, L"STATIC", tr(Text::ShellDialectLabel), 0, 16, 224, 420, 20, 307);
-            addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 450, 220, 258, 160, 107);
+            addControl(window, L"STATIC", tr(Text::ShellDialectLabel), 0, 16, 288, 420, 20, 307);
+            addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 450, 284, 258, 160, 107);
             for (const auto& dialect : formatter::shellDialects)
                 SendDlgItemMessageW(window, 107, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(dialect.label));
             SendDlgItemMessageW(window, 107, CB_SETCURSEL, formatter::shellDialectIndex(settings.shellDialect), 0);
-            addControl(window, L"STATIC", L"", 0, 16, 260, 692, 44, 105);
+            addControl(window, L"STATIC", L"", 0, 16, 324, 692, 44, 105);
             addControl(window, L"EDIT", L"", WS_TABSTOP | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL,
-                16, 310, 692, 140, 108);
-            addControl(window, L"BUTTON", tr(Text::EnvironmentCheck), WS_TABSTOP, 16, 464, 264, 30, 205);
-            addControl(window, L"BUTTON", tr(Text::Save), WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 464, 100, 30, IDOK);
-            addControl(window, L"BUTTON", tr(Text::Cancel), WS_TABSTOP, 608, 464, 100, 30, IDCANCEL);
+                16, 374, 692, 140, 108);
+            addControl(window, L"BUTTON", tr(Text::EnvironmentCheck), WS_TABSTOP, 16, 528, 264, 30, 205);
+            addControl(window, L"BUTTON", tr(Text::Save), WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 528, 100, 30, IDOK);
+            addControl(window, L"BUTTON", tr(Text::Cancel), WS_TABSTOP, 608, 528, 100, 30, IDCANCEL);
             environmentReport = nullptr;
             setDetectionStatus(window, Text::Empty);
             SendMessageW(host._nppHandle, NPPM_MODELESSDIALOG, MODELESSDIALOGADD, reinterpret_cast<LPARAM>(window));
@@ -311,22 +341,22 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
                 (detectionResult.field == 108 ? Text::EnvironmentChecked : Text::Detected) : Text::DetectionFailed, detectionResult.error);
             detectionControls(window, true);
             if (GetActiveWindow() == window)
-                SetFocus(GetDlgItem(window, detectionResult.field == 108 ? 205 : detectionResult.field == 101 ? 203 : 204));
+                SetFocus(GetDlgItem(window, detectionResult.field == 108 ? 205 : detectionResult.field == 109 ? 210 : detectionResult.field == 101 ? 203 : 204));
             return 0;
         }
         if (message == WM_COMMAND) {
             int id = LOWORD(w);
-            if ((id == 101 || id == 102) && HIWORD(w) == EN_CHANGE && !environmentReport.is_null()) {
+            if ((id == 101 || id == 102 || id == 109) && HIWORD(w) == EN_CHANGE && !environmentReport.is_null()) {
                 environmentReport = nullptr;
                 showEnvironmentReport(window);
                 setDetectionStatus(window, Text::EnvironmentInvalidated);
             }
-            if (detectionWorker.joinable() && (id == IDOK || (id >= 201 && id <= 205))) return 0;
-            if (id == 201 || id == 202) { browse(window, id == 201); return 0; }
-            if (id >= 203 && id <= 205) { startDetection(window, id); return 0; }
+            if (detectionWorker.joinable() && (id == IDOK || (id >= 201 && id <= 210))) return 0;
+            if (id == 201 || id == 202 || id == 209) { browse(window, id - 100); return 0; }
+            if ((id >= 203 && id <= 205) || id == 210) { startDetection(window, id); return 0; }
             if (id == IDOK) {
                 Settings next;
-                next.node = controlText(window, 101); next.prettier = controlText(window, 102);
+                next.node = controlText(window, 101); next.prettier = controlText(window, 102); next.ruff = controlText(window, 109);
                 std::wstring timeout = controlText(window, 104);
                 size_t end = 0;
                 unsigned long value;
@@ -339,10 +369,12 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
                 next.sqlDialect = formatter::sqlDialects[dialect >= 0 && static_cast<size_t>(dialect) < std::size(formatter::sqlDialects) ? dialect : 0].value;
                 auto shell = SendDlgItemMessageW(window, 107, CB_GETCURSEL, 0, 0);
                 next.shellDialect = formatter::shellDialects[shell >= 0 && static_cast<size_t>(shell) < std::size(formatter::shellDialects) ? shell : 0].value;
-                if (!fs::path(next.node).is_absolute() || !fs::is_regular_file(next.node))
+                if (!next.node.empty() && (!fs::path(next.node).is_absolute() || !fs::is_regular_file(next.node)))
                     throw std::runtime_error(utf8(tr(Text::NodePathError)));
-                if (!fs::path(next.prettier).is_absolute() || !fs::is_regular_file(fs::path(next.prettier) / L"package.json"))
+                if (!next.prettier.empty() && (!fs::path(next.prettier).is_absolute() || !fs::is_regular_file(fs::path(next.prettier) / L"package.json")))
                     throw std::runtime_error(utf8(tr(Text::PrettierPathError)));
+                if (!next.ruff.empty() && (!fs::path(next.ruff).is_absolute() || !fs::is_regular_file(next.ruff)))
+                    throw std::runtime_error(utf8(tr(Text::RuffPathError)));
                 saveSettings(next);
                 DestroyWindow(window); return 0;
             }
@@ -378,7 +410,7 @@ void openSettings() {
     if (settingsWindow) { SetForegroundWindow(settingsWindow); return; }
     settingsWindow = CreateWindowExW(WS_EX_CONTROLPARENT, L"NppFormatterSettings", tr(Text::SettingsTitle),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, 740, 544, host._nppHandle, nullptr, instance, nullptr);
+        CW_USEDEFAULT, CW_USEDEFAULT, 740, 608, host._nppHandle, nullptr, instance, nullptr);
     if (!settingsWindow) return;
     centerOnHost(settingsWindow);
     ShowWindow(settingsWindow, SW_SHOW);
@@ -477,7 +509,6 @@ void formatCurrentDocument(std::string overrideParser = {}, bool promptForParser
         if (shuttingDown) return;
         if (worker.joinable() || choosingParser) { status(Text::Busy); return; }
         loadSettings();
-        if (settings.node.empty() || settings.prettier.empty()) { openSettings(); return; }
         HWND editor = currentEditor();
         if (sci(editor, SCI_GETREADONLY)) throw std::runtime_error("This document is read-only.");
         if (sci(editor, SCI_GETCODEPAGE) != SC_CP_UTF8)
@@ -512,18 +543,36 @@ void formatCurrentDocument(std::string overrideParser = {}, bool promptForParser
                 else payload["detectParser"] = language == L_TEXT;
             }
         }
+        if (!payload.contains("parser") && payload.contains("filePath") && formatter::pythonFile(filename)) payload["parser"] = "python";
+        if (!payload.contains("parser") && !payload.contains("filePath") &&
+            (settings.node.empty() || settings.prettier.empty())) {
+            auto parser = chooseParser(false);
+            if (parser.empty()) { status(Text::FormatCancelled); return; }
+            if (!requestIsCurrent(request)) { status(Text::Discarded); return; }
+            documentParsers[request.bufferId] = {parser, request.document};
+            payload["parser"] = parser;
+        }
+        bool python = payload.value("parser", "") == "python";
+        if (!python && (settings.node.empty() || settings.prettier.empty())) { openSettings(); return; }
         request.payload = payload.dump();
         completion.reset(); cancelled = false; finished = false;
         Settings chosen = settings;
         std::wstring bridge = (pluginDirectory / L"bridge.cjs").wstring();
-        worker = std::thread([request = std::move(request), chosen, bridge]() mutable {
+        worker = std::thread([request = std::move(request), chosen, bridge, python]() mutable {
             auto result = std::make_unique<Completion>(); result->request = std::move(request);
             try {
-                auto process = formatter::runBridge(chosen.node, bridge, result->request.payload, chosen.timeoutMs, cancelled);
-                if (process.output.empty()) throw std::runtime_error("Node.js returned no result. " + process.error);
-                result->response = json::parse(process.output);
-                if (process.exitCode != 0 && result->response.value("ok", false))
-                    throw std::runtime_error("Node.js exited unsuccessfully. " + process.error);
+                if (python) {
+                    const auto payload = json::parse(result->request.payload);
+                    result->response = formatter::formatPython(chosen.ruff, result->request.text,
+                        wide(payload.value("filePath", "")), payload.at("cursorOffset").get<size_t>(),
+                        payload.value("endOfLine", "lf"), chosen.timeoutMs, cancelled);
+                } else {
+                    auto process = formatter::runBridge(chosen.node, bridge, result->request.payload, chosen.timeoutMs, cancelled);
+                    if (process.output.empty()) throw std::runtime_error("Node.js returned no result. " + process.error);
+                    result->response = json::parse(process.output);
+                    if (process.exitCode != 0 && result->response.value("ok", false))
+                        throw std::runtime_error("Node.js exited unsuccessfully. " + process.error);
+                }
             } catch (const std::exception& error) { result->error = error.what(); }
             completion = std::move(result);
             finished.store(true, std::memory_order_release);
@@ -545,6 +594,8 @@ void applyCompletion() {
     if (!result->error.empty()) throw std::runtime_error(result->error);
     bool retry = false;
     if (!result->response.value("ok", false)) {
+        if (result->response.value("code", "") == "MISSING_RUFF")
+            throw std::runtime_error(utf8(tr(Text::RuffMissing)));
         if (result->response.contains("code") && result->response.at("code") == "MISSING_JAVA_PLUGIN")
             throw std::runtime_error(utf8(tr(Text::JavaPluginMissing)));
         if (result->response.contains("code") && result->response.at("code") == "MISSING_XML_PLUGIN")

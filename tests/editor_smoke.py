@@ -295,6 +295,13 @@ def run(sandbox, architecture, language='en'):
             x = max(work.left, min(x, max(work.left, work.right - width)))
             y = max(work.top, min(y, max(work.top, work.bottom - height)))
             assert abs(bounds.left - x) <= 1 and abs(bounds.top - y) <= 1, 'Settings is not centered on its owner'
+            previous = None
+            for identifier in (101, 102, 109, 104, 106, 107, 105, 108, 205):
+                rect = W.RECT()
+                assert USER32.GetWindowRect(get_control(dialog, identifier), C.byref(rect))
+                if previous is not None:
+                    assert rect.top >= previous.bottom, 'Settings controls overlap'
+                previous = rect
             return dialog
 
         def detect(dialog, identifier):
@@ -310,14 +317,14 @@ def run(sandbox, architecture, language='en'):
         title = C.create_unicode_buffer(256)
         send(dialog, 13, len(title), C.addressof(title))
         assert title.value == labels['title'], title.value
-        for identifier, key in ((201, 'browse'), (202, 'browse'), (203, 'detect'), (204, 'detect'), (1, 'save'), (2, 'cancel')):
+        for identifier, key in ((201, 'browse'), (202, 'browse'), (209, 'browse'), (203, 'detect'), (204, 'detect'), (210, 'detect'), (1, 'save'), (2, 'cancel')):
             assert control_text(dialog, identifier) == labels[key]
         assert not get_control(dialog, 103), 'Global untitled parser setting should be removed'
         assert control_text(dialog, 106) == 'SQL', 'Old settings must default to standard SQL'
         assert control_text(dialog, 107) == 'Bash', 'Old settings must default to Bash'
         send(get_control(dialog, 107), 0x14E, 1, 0)
         send(get_control(dialog, 106), 0x14E, 1, 0)  # MySQL, not saved until Save.
-        for identifier in (301, 302, 304, 306, 307):
+        for identifier in (301, 302, 304, 306, 307, 309):
             label = control_text(dialog, identifier)
             assert label
             if language != 'en':
@@ -331,7 +338,7 @@ def run(sandbox, architecture, language='en'):
         USER32.PostMessageW(error_dialog, 0x10, 0, 0)
         until(lambda: not USER32.IsWindow(error_dialog))
         set_control(dialog, 104, '10000')
-        for browse_id, detect_id in ((201, 203), (202, 204)):
+        for browse_id, detect_id in ((201, 203), (202, 204), (209, 210)):
             browse_rect, detect_rect = W.RECT(), W.RECT()
             assert get_control(dialog, detect_id), 'Auto-detect button is missing'
             USER32.GetWindowRect(get_control(dialog, browse_id), C.byref(browse_rect))
@@ -430,6 +437,7 @@ def run(sandbox, architecture, language='en'):
             send(get_control(dialog, 106), 0x14E, 5, 0)  # SQL Server, unsaved.
             set_control(dialog, 101, '')
             set_control(dialog, 102, 'unsaved path')
+            set_control(dialog, 109, 'unsaved Ruff path')
             set_control(dialog, 104, '15000')
             USER32.PostMessageW(dialog, 0x111, 204, 0)
             until(lambda: labels['node_first'] in control_text(dialog, 105))
@@ -474,6 +482,8 @@ def run(sandbox, architecture, language='en'):
                     assert 'Node.js:' in control_text(dialog, 108)
                     assert {'en': 'Check failed', 'zh-TW': '檢查失敗'}[target] in control_text(dialog, 108)
                 assert control_text(dialog, 102) == 'unsaved path'
+                assert control_text(dialog, 109) == 'unsaved Ruff path'
+                assert control_text(dialog, 210) == translated['detect']
                 assert control_text(dialog, 104) == '15000'
                 assert control_text(dialog, 106) == 'SQL Server (T-SQL)'
                 assert control_text(dialog, 107) == 'mksh'
@@ -510,6 +520,7 @@ def run(sandbox, architecture, language='en'):
             assert automation.text(about_dialog) == about_text, 'Repeated UIA reads changed About text'
         print(f'PASS native UI Automation: {architecture} helper, repeated About reads', flush=True)
         assert labels['about_body'] in about_text, about_text
+        assert 'Python' in about_text and 'Ruff' in about_text and '.pyi' in about_text
         assert 'prettier-plugin-java' in about_text, 'About must explain the optional Java dependency'
         assert '@prettier/plugin-xml' in about_text, 'About must explain the optional XML dependency'
         for package in ('@prettier/plugin-php', 'prettier-plugin-sql', 'prettier-plugin-properties', 'prettier-plugin-toml', 'prettier-plugin-sh'):
@@ -599,6 +610,9 @@ def run(sandbox, architecture, language='en'):
         def format_to(expected_text):
             USER32.PostMessageW(main_window, 0x111, command, 0)
             until(lambda: text(editor) == expected_text)
+            # Reading replacement text can precede SCI_ENDUNDOACTION on the UI
+            # thread. Wait for the completion status before inspecting undo.
+            until(lambda: status() != labels['formatting'])
 
         def replace_part(old, new):
             current = text(editor).encode('utf-8')
@@ -641,7 +655,7 @@ def run(sandbox, architecture, language='en'):
         format_to('const answer = 42;\n')
         new_document('const answer:number=42;', 85)  # L_TYPESCRIPT
         format_to('const answer: number = 42;\n')
-        new_document('{"a":1}', 22)  # L_PYTHON must not be silently treated as JSON.
+        new_document('{"a":1}', 2)  # Unsupported L_C must not be silently treated as JSON.
         picker = open_picker()
         USER32.PostMessageW(picker, 0x111, 2, 0)
         until(lambda: not USER32.IsWindow(picker))
@@ -1001,7 +1015,96 @@ def run(sandbox, architecture, language='en'):
         USER32.PostMessageW(dialog, 0x111, 2, 0)
         until(lambda: not USER32.IsWindow(dialog))
         print('PASS environment: all seven optional extensions, versions and current document context', flush=True)
-        report = {'architecture': architecture, 'language': language, 'checks': 28,
+
+        python_source = 'message="中文😀"\nanswer=42\n'
+        python_expected = 'message = "中文😀"\nanswer = 42\n'
+        new_document(python_source, 22)  # L_PYTHON
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        missing = until(lambda: next((w for w in windows(process.pid)
+                                     if window_class(w) == '#32770' and window_title(w) == SETTING_ERRORS[language][0]), None))
+        guidance = {'en': 'Python formatting requires Ruff.', 'zh-CN': 'Python 格式化需要 Ruff。', 'zh-TW': 'Python 格式化需要 Ruff。'}[language]
+        assert guidance in automation.text(missing)
+        assert text(editor) == python_source
+        USER32.PostMessageW(missing, 0x10, 0, 0)
+        until(lambda: not USER32.IsWindow(missing))
+        print('PASS Python: localized missing Ruff leaves source intact', flush=True)
+
+        python_file = sandbox / 'python sample.py'
+        raw = str(python_file).encode('utf-16-le') + b'\0\0'
+        assert KERNEL32.WriteProcessMemory(handle, memory, C.c_char_p(raw), len(raw), None)
+        assert send(main_window, 2024 + 78, 0, memory)
+        disk_before = python_file.read_bytes()
+        ruff_source = Path(os.environ.get('RUFF_EXE') or ROOT / 'build' / architecture / 'ruff' / 'ruff.exe')
+        local_ruff = sandbox / '.venv' / 'Scripts' / 'ruff.exe'
+        local_ruff.parent.mkdir(parents=True)
+        shutil.copy2(ruff_source, local_ruff)
+        before = ini_path.read_bytes()
+        dialog = open_settings()
+        set_control(dialog, 101, '')
+        set_control(dialog, 102, '')
+        set_control(dialog, 109, node)  # An executable that is not Ruff.
+        invalid = check_environment(dialog)
+        assert 'Ruff (Python):' in invalid and 'did not report a Ruff version' in invalid
+        detect(dialog, 210)
+        assert os.path.samefile(control_text(dialog, 109), local_ruff)
+        report_text = check_environment(dialog)
+        available = {'en': 'Available', 'zh-CN': '可用', 'zh-TW': '可用'}[language]
+        assert f'Ruff (Python): {available}' in report_text
+        assert 'ruff 0.17.5' in report_text
+        assert ini_path.read_bytes() == before
+        USER32.PostMessageW(dialog, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        dialog = open_settings()
+        assert control_text(dialog, 109) == '', 'Cancel persisted Ruff path'
+        set_control(dialog, 101, '')
+        set_control(dialog, 102, '')
+        detect(dialog, 210)
+        USER32.PostMessageW(dialog, 0x111, 1, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        saved.read(ini_path, encoding='utf-16')
+        assert saved['Formatter']['NodePath'] == '' and saved['Formatter']['PrettierPath'] == ''
+        assert os.path.samefile(saved['Formatter']['RuffPath'], local_ruff)
+        print('PASS Python settings: project detection, independent environment check, Cancel and Ruff-only Save', flush=True)
+
+        send(main_window, 2024 + 6, 0, 58)  # Saved extension takes precedence over JS highlighting.
+        send(editor, 2175, 0, 0)
+        send(editor, 2025, python_source.encode('utf-8').index(b'answer'), 0)
+        format_to(python_expected)
+        assert send(editor, 2008, 0, 0) == python_expected.encode('utf-8').index(b'answer')
+        assert python_file.read_bytes() == disk_before, 'Ruff wrote to disk'
+        send(editor, 2176, 0, 0)
+        assert text(editor) == python_source
+        format_to(python_expected)
+        send(editor, 2175, 0, 0)
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        until(lambda: labels['unchanged'] in status())
+        assert not send(editor, 2174, 0, 0)
+        set_text('def broken(:\n')
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        error_dialog = wait_parse_error()
+        automation.invoke(error_dialog, PARSE_ERRORS[language][1])
+        until(lambda: 'Failed to parse' in automation.text(error_dialog))
+        assert text(editor) == 'def broken(:\n'
+        USER32.PostMessageW(error_dialog, 0x10, 0, 0)
+        until(lambda: not USER32.IsWindow(error_dialog))
+        print('PASS Python editor: saved inference, Unicode caret, one undo, no-op, diagnostics and unchanged disk', flush=True)
+
+        (sandbox / 'ruff.toml').write_text('[format]\nquote-style = "single"\n', encoding='utf-8')
+        set_text('name="value"\n')
+        format_to("name = 'value'\n")
+        new_document('name="value"\n', 22)
+        format_to('name = "value"\n')  # Untitled buffers isolate project configuration.
+        new_document('x=1\n')
+        choose(open_picker(), 'Python (Ruff)')  # Works without Node or Prettier paths.
+        until(lambda: text(editor) == 'x = 1\n')
+        replace_part('1', '2')
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        until(lambda: labels['unchanged'] in status())  # Remembered Python choice.
+        new_document('x=3\n', 58)
+        choose(open_picker(format_as_command), 'Python (Ruff)')
+        until(lambda: text(editor) == 'x = 3\n')
+        print('PASS Python routing: project config, isolated untitled, host language, picker memory and explicit override', flush=True)
+        report = {'architecture': architecture, 'language': language, 'checks': 32,
                   'live_language_switch': language == 'en', 'result': 'PASS'}
         (ROOT / 'build' / architecture / f'editor-smoke-{language}.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     finally:

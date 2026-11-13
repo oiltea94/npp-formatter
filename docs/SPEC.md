@@ -8,7 +8,7 @@ inspired by Formatter for Sublime Text. Multiple external tools, configuration-b
 extension, and language-specific workflows are the target; Prettier is the first
 adapter. External formatters and their runtimes are installed by the user.
 
-This document distinguishes the implemented 0.2.0 Prettier integration from planned
+This document distinguishes the implemented 0.3.0 Prettier and Ruff integration from planned
 capabilities. The target architecture below is a plan, not current functionality.
 
 ## Target architecture (planned)
@@ -49,9 +49,11 @@ editor mutations. These criteria remain unverified until their stages are built.
 ## Current prototype scope
 
 The implemented prototype is a lightweight C++ DLL with a Prettier-specific
-JavaScript bridge. It currently requires user-installed Node.js and Prettier;
-neither is included in the ZIP. It does not yet implement generic tool definitions,
-additional adapters, selection formatting, or pipelines.
+JavaScript bridge and a native Ruff adapter for Python. The shared process runner
+accepts an executable, argument vector, working directory and stdin. Prettier needs
+user-installed Node.js and Prettier; Python needs only a user-installed Ruff executable.
+None is included in the ZIP. Configurable tool definitions, selection formatting
+and pipelines remain planned.
 
 Implemented slices:
 
@@ -106,6 +108,19 @@ Implemented slices:
     Node details even when Prettier fails. Clear results on path changes, preserve
     results through live translation, and never install packages or save settings.
 
+11. Python support: call Ruff directly through the shared process runner. Route
+    .py/.pyi/.pyw files, the host's Python language and an explicit Python picker
+    choice to Ruff without requiring Node.js. Persist RuffPath; browse, detect
+    project .venv/PATH installations and inspect versions/sample formatting from
+    unsaved settings. Keep failures in one tool independent of the other's check.
+    Saved buffers use Ruff configuration discovery and force-exclude; untitled
+    buffers use isolated defaults and the editor EOL preference. Never lint, sort
+    imports, run Python, or write source files. Preserve unchanged prefix/suffix
+    caret positions and use a clamped UTF-16 line/column fallback within changes.
+    Ruff 0.17.5 is the tested version; x86 editor tests use x64 Ruff on x64 Windows,
+    and ARM64 CI uses ARM64 Ruff. Native 32-bit Windows is outside this adapter's
+    verified scope. Svelte/Astro/Pug are deferred; C/C++ is the next language priority.
+
 The supported build targets are Notepad++ x86, x64, and ARM64 with UTF-8 Scintilla buffers. Existing non-UTF-8
 buffers receive a clear message asking the user to convert the encoding first.
 Saved files infer their parser from the path and project configuration. Untitled
@@ -159,6 +174,10 @@ publishing externally or replacing an existing user installation.
   Shell dialect persistence and project precedence, and read-only environment
   diagnostics with unsaved paths, cancellation, missing/broken packages and locale changes.
 - Error/timeout/invalid response/stale result leaves original text untouched.
+- Python formatting works with empty Node/Prettier paths. Verify Ruff-only Save,
+  Cancel, version/sample checks, project discovery, missing-tool translations,
+  saved/untitled/picker/override routes, Unicode caret fallback, undo, no-op,
+  invalid syntax/configuration and unchanged source files with a real Ruff process.
 - One undo restores the previous text; a no-op leaves the undo stack untouched.
 - Editor remains responsive while a child process is running.
 - ZIP contains no Node.js runtime or Prettier package.

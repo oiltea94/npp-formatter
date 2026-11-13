@@ -70,6 +70,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
           python scripts/bootstrap.py
           if ($LASTEXITCODE -ne 0) { throw 'Compiler bootstrap failed' }
+          python tests/download_ruff.py --arch ${{ matrix.arch }}
+          if ($LASTEXITCODE -ne 0) { throw 'Test Ruff download failed' }
+          "RUFF_EXE=$((Resolve-Path 'build/${{ matrix.arch }}/ruff/ruff.exe').Path)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Build, test and verify package
         run: ./scripts/build.ps1 -Architecture ${{ matrix.arch }} -RequireRuntimeTests
       - name: Test artifact validation failure cases

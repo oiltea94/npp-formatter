@@ -4,6 +4,34 @@
 
 No pending changes. / 暂无待发布改动。
 
+## 0.3.0
+
+### English
+
+#### Added
+
+- Add Python formatting through user-installed Ruff, independently of Node.js and Prettier. Recognize `.py`, `.pyi`, `.pyw`, Notepad++ Python, and a Python language-picker entry.
+- Add Ruff browsing, project/PATH detection, saved settings, and independent version/sample checks in English, Simplified Chinese, and Traditional Chinese.
+- Honor saved-file Ruff configuration and exclusions; isolate untitled defaults. Preserve source files, error text, one-step undo, and stale-result protection. Use an approximate line/column fallback for the caret in changed regions.
+- Verify Ruff 0.17.5 with x86/x64/ARM64 plugin builds; native ARM64 CI uses ARM64 Ruff. Tools remain user-installed and are never bundled.
+
+#### Fixed
+
+- Fix a UTF-8 text snapshot race in editor smoke tests and add deterministic regression checks.
+
+### 中文
+
+#### 新增
+
+- 通过用户自行安装的 Ruff 格式化 Python，不依赖 Node.js 或 Prettier。识别 `.py`、`.pyi`、`.pyw`、Notepad++ Python 语言及 Python 语言选择器选项。
+- 新增 Ruff 路径浏览、项目／PATH 自动检测、配置保存及独立的版本和样本检查，覆盖英文、简体中文和繁体中文。
+- 已保存文件遵循 Ruff 配置与排除规则，未保存文档使用隔离默认值。保留源文件、原始错误、一步撤销和过期结果保护；变化区域的光标使用近似行列定位。
+- 使用 Ruff 0.17.5 验证 x86、x64、ARM64 插件；ARM64 CI 使用原生 ARM64 Ruff。外部工具仍由用户自行安装，不随包附带。
+
+#### 修复
+
+- 修复编辑器冒烟测试读取 UTF-8 文本时的竞态，并加入确定性回归测试。
+
 ## 0.2.0
 
 ### English

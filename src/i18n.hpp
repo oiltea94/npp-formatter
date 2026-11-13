@@ -30,7 +30,8 @@ enum class Text {
     JavaPluginMissing, XmlPluginMissing, PhpPluginMissing, SqlPluginMissing, PropertiesPluginMissing, TomlPluginMissing, ShellPluginMissing,
     Busy, Formatting, Discarded, Ignored, Unchanged, Formatted, FormatFailed,
     EnvironmentCheck, CheckingEnvironment, EnvironmentChecked, EnvironmentAvailable,
-    EnvironmentMissing, EnvironmentError, EnvironmentBuiltins, EnvironmentScope, EnvironmentNotChecked, EnvironmentInvalidated, Count
+    EnvironmentMissing, EnvironmentError, EnvironmentBuiltins, EnvironmentScope, EnvironmentNotChecked, EnvironmentInvalidated,
+    RuffLabel, RuffFilter, DetectRuff, RuffPathError, RuffMissing, Count
 };
 
 struct Translation { const wchar_t* english; const wchar_t* simplified; const wchar_t* traditional; };
@@ -65,9 +66,9 @@ inline constexpr Translation translations[] = {
     {L"Could not create the settings file.", L"创建配置文件失败。", L"建立設定檔失敗。"},
     {L"Could not write settings.", L"写入配置失败。", L"寫入設定失敗。"},
     {L"Could not replace settings file.", L"替换配置文件失败。", L"取代設定檔失敗。"},
-    {L"NppFormatter " NPP_FORMATTER_VERSION_W L" prototype\n\nRequires user-installed Node.js 18+ and Prettier 3.x.\nConfigure both paths in Settings. UTF-8 buffers, full-document formatting.\n\nBuilt-in formatting languages:\nJavaScript / JSX, TypeScript / TSX, JSON, JSON5, JSONC, HTML, CSS, SCSS, Less, YAML, Markdown, MDX, Handlebars, GraphQL, Vue, Angular HTML.\nJava: requires user-installed prettier-plugin-java.\nXML / SVG / XSD / XSLT / XAML / RESX: requires @prettier/plugin-xml.\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\nTOML: prettier-plugin-toml (Node.js 20+).\nShell / Bash: prettier-plugin-sh (Prettier 3.6+).\n\nAdditional saved-file formats: Flow, MJML, PostCSS, JSON.stringify.\n\nAssign shortcuts through Notepad++ Shortcut Mapper.\nNode.js, Prettier and language plugins are not bundled.",
-     L"NppFormatter " NPP_FORMATTER_VERSION_W L" 原型版本\n\n需要自行安装 Node.js 18+ 和 Prettier 3.x。\n请在配置中选择或自动检测路径。支持 UTF-8 文档的全文格式化。\n\n内置格式化语言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、JSONC、HTML、CSS、SCSS、Less、YAML、Markdown、MDX、Handlebars、GraphQL、Vue、Angular HTML。\nJava：需要自行安装 prettier-plugin-java。\nXML / SVG / XSD / XSLT / XAML / RESX：需要 @prettier/plugin-xml。\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\nTOML: prettier-plugin-toml (Node.js 20+).\nShell / Bash: prettier-plugin-sh (Prettier 3.6+).\n\n已保存文件另支持：Flow、MJML、PostCSS、JSON.stringify。\n\n可通过 Notepad++ 的快捷键管理设置快捷键。\n插件不捆绑 Node.js、Prettier 或语言扩展包。",
-     L"NppFormatter " NPP_FORMATTER_VERSION_W L" 原型版本\n\n需要自行安裝 Node.js 18+ 和 Prettier 3.x。\n請在設定中選擇或自動偵測路徑。支援 UTF-8 文件的全文格式化。\n\n內建格式化語言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、JSONC、HTML、CSS、SCSS、Less、YAML、Markdown、MDX、Handlebars、GraphQL、Vue、Angular HTML。\nJava：需要自行安裝 prettier-plugin-java。\nXML / SVG / XSD / XSLT / XAML / RESX：需要 @prettier/plugin-xml。\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\nTOML: prettier-plugin-toml (Node.js 20+).\nShell / Bash: prettier-plugin-sh (Prettier 3.6+).\n\n已儲存檔案另支援：Flow、MJML、PostCSS、JSON.stringify。\n\n可透過 Notepad++ 的快捷鍵管理設定快捷鍵。\n外掛不附帶 Node.js、Prettier 或語言擴充套件。"},
+    {L"NppFormatter " NPP_FORMATTER_VERSION_W L" prototype\n\nRequires user-installed Node.js 18+ and Prettier 3.x for Prettier languages.\nConfigure both paths in Settings. UTF-8 buffers, full-document formatting.\n\nBuilt-in formatting languages:\nJavaScript / JSX, TypeScript / TSX, JSON, JSON5, JSONC, HTML, CSS, SCSS, Less, YAML, Markdown, MDX, Handlebars, GraphQL, Vue, Angular HTML.\nJava: requires user-installed prettier-plugin-java.\nXML / SVG / XSD / XSLT / XAML / RESX: requires @prettier/plugin-xml.\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\nTOML: prettier-plugin-toml (Node.js 20+).\nShell / Bash: prettier-plugin-sh (Prettier 3.6+).\nPython (.py / .pyi / .pyw): user-installed Ruff; no Node.js or Prettier required.\n\nAdditional saved-file formats: Flow, MJML, PostCSS, JSON.stringify.\n\nAssign shortcuts through Notepad++ Shortcut Mapper.\nNode.js, Prettier, Ruff and language plugins are not bundled.",
+     L"NppFormatter " NPP_FORMATTER_VERSION_W L" 原型版本\n\nPrettier 语言需要自行安装 Node.js 18+ 和 Prettier 3.x。\n请在配置中选择或自动检测路径。支持 UTF-8 文档的全文格式化。\n\n内置格式化语言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、JSONC、HTML、CSS、SCSS、Less、YAML、Markdown、MDX、Handlebars、GraphQL、Vue、Angular HTML。\nJava：需要自行安装 prettier-plugin-java。\nXML / SVG / XSD / XSLT / XAML / RESX：需要 @prettier/plugin-xml。\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\nTOML: prettier-plugin-toml (Node.js 20+).\nShell / Bash: prettier-plugin-sh (Prettier 3.6+).\nPython（.py / .pyi / .pyw）：自行安装 Ruff，无需 Node.js 或 Prettier。\n\n已保存文件另支持：Flow、MJML、PostCSS、JSON.stringify。\n\n可通过 Notepad++ 的快捷键管理设置快捷键。\n插件不捆绑 Node.js、Prettier、Ruff 或语言扩展包。",
+     L"NppFormatter " NPP_FORMATTER_VERSION_W L" 原型版本\n\nPrettier 語言需要自行安裝 Node.js 18+ 和 Prettier 3.x。\n請在設定中選擇或自動偵測路徑。支援 UTF-8 文件的全文格式化。\n\n內建格式化語言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、JSONC、HTML、CSS、SCSS、Less、YAML、Markdown、MDX、Handlebars、GraphQL、Vue、Angular HTML。\nJava：需要自行安裝 prettier-plugin-java。\nXML / SVG / XSD / XSLT / XAML / RESX：需要 @prettier/plugin-xml。\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\nTOML: prettier-plugin-toml (Node.js 20+).\nShell / Bash: prettier-plugin-sh (Prettier 3.6+).\nPython（.py / .pyi / .pyw）：自行安裝 Ruff，無需 Node.js 或 Prettier。\n\n已儲存檔案另支援：Flow、MJML、PostCSS、JSON.stringify。\n\n可透過 Notepad++ 的快捷鍵管理設定快捷鍵。\n外掛不附帶 Node.js、Prettier、Ruff 或語言擴充套件。"},
     {L"Project homepage:", L"项目主页：", L"專案首頁："},
     {L"Could not open the project homepage. Copy this address into your browser:\nhttps://github.com/oiltea94/npp-formatter",
      L"打开项目主页失败。请将此地址复制到浏览器：\nhttps://github.com/oiltea94/npp-formatter",
@@ -128,6 +129,13 @@ inline constexpr Translation translations[] = {
     {L"Document at check start (blank = untitled):", L"检查开始时的文档（空白表示未保存）：", L"檢查開始時的文件（空白表示未儲存）："},
     {L"Language checks were not completed. Fix the error above and retry.", L"尚未完成语言检查，请修复上述错误后重试。", L"尚未完成語言檢查，請修復上述錯誤後重試。"},
     {L"Paths changed. Check the environment again.", L"路径已更改，请重新检查环境。", L"路徑已變更，請重新檢查環境。"},
+    {L"Ruff executable for Python (ruff.exe)", L"Python 使用的 Ruff 可执行文件（ruff.exe）", L"Python 使用的 Ruff 執行檔（ruff.exe）"},
+    {L"Ruff executable\0ruff.exe\0Executables\0*.exe\0\0", L"Ruff 可执行文件\0ruff.exe\0可执行文件\0*.exe\0\0", L"Ruff 執行檔\0ruff.exe\0執行檔\0*.exe\0\0"},
+    {L"Detecting Ruff...", L"正在检测 Ruff...", L"正在偵測 Ruff..."},
+    {L"Select an existing absolute path to ruff.exe, or leave it empty when not using Python.", L"请选择 ruff.exe 的有效绝对路径；不使用 Python 时可留空。", L"請選擇 ruff.exe 的有效絕對路徑；不使用 Python 時可留空。"},
+    {L"Python formatting requires Ruff. Install Ruff yourself, then select or auto-detect ruff.exe in Settings. Node.js and Prettier are not required for Python. Your text has not been changed.",
+     L"Python 格式化需要 Ruff。请自行安装 Ruff，然后在配置中选择或自动检测 ruff.exe。Python 格式化无需 Node.js 或 Prettier。文档内容未修改。",
+     L"Python 格式化需要 Ruff。請自行安裝 Ruff，然後在設定中選擇或自動偵測 ruff.exe。Python 格式化無需 Node.js 或 Prettier。文件內容未修改。"},
 };
 static_assert(sizeof(translations) / sizeof(translations[0]) == static_cast<size_t>(Text::Count));
 

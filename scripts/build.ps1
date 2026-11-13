@@ -41,6 +41,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "$arch plugin build failed." }
         & $compiler @flags -municode 'tests/process_test.cpp' -o "$build/process_test.exe"
         if ($LASTEXITCODE -ne 0) { throw "$arch process test build failed." }
+        & $compiler @flags -municode 'tests/ruff_test.cpp' -o "$build/ruff_test.exe"
+        if ($LASTEXITCODE -ne 0) { throw "$arch Ruff test build failed." }
         & $compiler @flags -municode 'tests/ui_automation.cpp' -o "$build/ui_automation.exe" -lole32 -loleaut32 -luuid
         if ($LASTEXITCODE -ne 0) { throw "$arch UI Automation helper build failed." }
         $canRun = ($arch -eq 'x86') -or ($arch -eq 'x64' -and $hostArchitecture -eq 'AMD64') -or ($arch -eq 'arm64' -and $hostArchitecture -eq 'ARM64')
@@ -48,6 +50,10 @@ try {
         if (-not $SkipTests -and $canRun) {
             & "./$build/process_test.exe" $nodePath (Join-Path $root 'tests/process-fixture.cjs')
             if ($LASTEXITCODE -ne 0) { throw "$arch native process tests failed." }
+            $ruffPath = $env:RUFF_EXE
+            if (-not $ruffPath) { $ruffPath = (Get-Command ruff -ErrorAction Stop).Source }
+            & "./$build/ruff_test.exe" $ruffPath
+            if ($LASTEXITCODE -ne 0) { throw "$arch Ruff integration tests failed." }
         } else {
             Write-Host "SKIP $arch runtime tests (host=$hostArchitecture, SkipTests=$SkipTests); static package verification still runs."
         }
