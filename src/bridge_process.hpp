@@ -50,18 +50,18 @@ inline std::wstring quote(const std::wstring& arg) {
 
 struct ProcessResult { DWORD exitCode = 0; std::string output, error; };
 
-inline ProcessResult runBridge(const std::wstring& node, const std::wstring& bridge,
+inline ProcessResult runProcess(const std::wstring& executable, const std::vector<std::wstring>& arguments,
                                const std::string& input, DWORD timeoutMs,
-                               const std::atomic<bool>& cancelled) {
+                               const std::atomic<bool>& cancelled, const std::wstring& directory = {}) {
     SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
     Handle childIn, parentIn, parentOut, childOut, parentErr, childErr;
     if (!CreatePipe(&childIn.value, &parentIn.value, &security, 0) ||
         !CreatePipe(&parentOut.value, &childOut.value, &security, 0) ||
         !CreatePipe(&parentErr.value, &childErr.value, &security, 0))
-        throw std::runtime_error("Could not create Node.js pipes.");
+        throw std::runtime_error("Could not create formatter pipes.");
     for (HANDLE handle : {parentIn.value, parentOut.value, parentErr.value})
         if (!SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0))
-            throw std::runtime_error("Could not configure Node.js pipes.");
+            throw std::runtime_error("Could not configure formatter pipes.");
 
     SIZE_T bytes = 0;
     InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
@@ -82,7 +82,7 @@ inline ProcessResult runBridge(const std::wstring& node, const std::wstring& bri
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
     limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
     if (!job.value || !SetInformationJobObject(job.value, JobObjectExtendedLimitInformation, &limits, sizeof(limits)))
-        throw std::runtime_error("Could not initialize the Node.js process job.");
+        throw std::runtime_error("Could not initialize the formatter process job.");
     STARTUPINFOEXW startup{};
     startup.StartupInfo.cb = sizeof(startup);
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
@@ -91,15 +91,16 @@ inline ProcessResult runBridge(const std::wstring& node, const std::wstring& bri
     startup.StartupInfo.hStdError = childErr.value;
     startup.lpAttributeList = attributes;
     PROCESS_INFORMATION process{};
-    std::wstring command = quote(node) + L" " + quote(bridge);
-    if (!CreateProcessW(node.c_str(), command.data(), nullptr, nullptr, TRUE,
+    std::wstring command = quote(executable);
+    for (const auto& argument : arguments) command += L" " + quote(argument);
+    if (!CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, TRUE,
                         CREATE_NO_WINDOW | CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT,
-                        nullptr, nullptr, &startup.StartupInfo, &process))
-        throw std::runtime_error("Could not start node.exe (Windows error " + std::to_string(GetLastError()) + "). Check Settings.");
+                        nullptr, directory.empty() ? nullptr : directory.c_str(), &startup.StartupInfo, &process))
+        throw std::runtime_error("Could not start formatter (Windows error " + std::to_string(GetLastError()) + "). Check Settings.");
     Handle processHandle(process.hProcess), threadHandle(process.hThread);
     if (!AssignProcessToJobObject(job.value, processHandle.value)) {
         TerminateProcess(processHandle.value, 1);
-        throw std::runtime_error("Could not assign Node.js to its process job.");
+        throw std::runtime_error("Could not assign formatter to its process job.");
     }
     childIn.reset(); childOut.reset(); childErr.reset();
     ProcessResult result;
@@ -146,16 +147,21 @@ inline ProcessResult runBridge(const std::wstring& node, const std::wstring& bri
         if (cancelled || overflow) break;
         if (GetTickCount64() - started >= timeoutMs) { timedOut = true; break; }
     }
-    // Also close descendants that may have inherited a pipe after Node exits.
+    // Also close descendants that may have inherited a pipe after the tool exits.
     TerminateJobObject(job.value, 1);
     WaitForSingleObject(processHandle.value, INFINITE);
     GetExitCodeProcess(processHandle.value, &result.exitCode);
     writer.join(); outReader.join(); errReader.join();
     if (cancelled) throw std::runtime_error("Formatting cancelled.");
     if (timedOut) throw std::runtime_error("Formatting timed out. Increase the timeout in Settings if necessary.");
-    if (overflow) throw std::runtime_error("Node.js response exceeded 64 MiB.");
-    if (failedWait) throw std::runtime_error("Failed to wait for Node.js.");
-    if (writeFailed && result.output.empty()) throw std::runtime_error("Node.js closed its input unexpectedly. " + result.error);
+    if (overflow) throw std::runtime_error("Formatter response exceeded 64 MiB.");
+    if (failedWait) throw std::runtime_error("Failed to wait for formatter.");
+    if (writeFailed && result.output.empty()) throw std::runtime_error("Formatter closed its input unexpectedly. " + result.error);
     return result;
+}
+inline ProcessResult runBridge(const std::wstring& node, const std::wstring& bridge,
+                               const std::string& input, DWORD timeoutMs,
+                               const std::atomic<bool>& cancelled) {
+    return runProcess(node, {bridge}, input, timeoutMs, cancelled);
 }
 } // namespace formatter

@@ -36,6 +36,15 @@ int wmain(int argc, wchar_t** argv) {
             check(formatter::sqlDialectIndex(formatter::sqlDialects[i].value) == i, "SQL dialect setting round trip failed");
         if (argc != 3) throw std::runtime_error("Usage: process_test.exe node.exe fixture.cjs");
         std::atomic<bool> cancel{false};
+        const auto cwd = std::filesystem::temp_directory_path().wstring();
+        std::vector<std::wstring> arguments{argv[2], L"space here", L"quote\"here", L"trailing\\", L"", L"中文😀", L"& no shell"};
+        auto raw = formatter::runProcess(argv[1], arguments, R"({"mode":"arguments","text":"stdin"})", 5000, cancel, cwd);
+        auto details = nlohmann::json::parse(raw.output);
+        check(raw.exitCode == 0 && details.at("text") == "stdin", "Generic process stdin failed");
+        check(std::filesystem::equivalent(formatter::wide(details.at("cwd").get<std::string>()), cwd), "Working directory failed");
+        for (size_t i = 1; i < arguments.size(); ++i)
+            check(details.at("args").at(i - 1) == formatter::utf8(arguments[i]), "Argument quoting failed");
+        std::cout << "PASS generic process arguments, Unicode, working directory and stdin\n";
         auto invoke = [&](const nlohmann::json& request, DWORD timeout = 5000) {
             return formatter::runBridge(argv[1], argv[2], request.dump(), timeout, cancel);
         };
