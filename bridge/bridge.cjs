@@ -85,6 +85,9 @@ const optionalPlugins = [
   { parser: 'java', name: 'prettier-plugin-java', code: 'MISSING_JAVA_PLUGIN', extensions: ['.java'] },
   { parser: 'xml', name: '@prettier/plugin-xml', code: 'MISSING_XML_PLUGIN',
     extensions: ['.xml', '.svg', '.xsd', '.xsl', '.xslt', '.xaml', '.resx'] },
+  { parser: 'php', name: '@prettier/plugin-php', code: 'MISSING_PHP_PLUGIN', extensions: ['.php', '.phtml'] },
+  { parser: 'sql', name: 'prettier-plugin-sql', code: 'MISSING_SQL_PLUGIN', extensions: ['.sql'] },
+  { parser: 'dot-properties', name: 'prettier-plugin-properties', code: 'MISSING_PROPERTIES_PLUGIN', extensions: ['.properties'] },
 ];
 
 function resolveOptionalPlugin(dependency, fromFiles) {
@@ -173,9 +176,11 @@ async function run(request) {
     parser = optionalPlugins.find(item => item.extensions.includes(extension))?.parser;
   }
   const java = (parser ?? config?.parser) === 'java';
+  const sql = (parser ?? config?.parser) === 'sql';
   const dependency = optionalPlugins.find(item => item.parser === (parser ?? config?.parser));
   if (dependency) await addOptionalPlugin(dependency, plugins, [filePath, configFile, packageFile]);
   const options = {
+    ...(sql && config?.formatter !== 'node-sql-parser' ? { language: request.sqlDialect ?? 'sql' } : {}),
     endOfLine: request.endOfLine ?? 'auto', ...config, plugins,
     filepath: filePath, cursorOffset: request.cursorOffset,
   };
@@ -188,7 +193,8 @@ async function run(request) {
     return {
       ok: false, error: `${error.name}: ${error.message}`,
       canChooseParser: Boolean(error.loc || error.name === 'SyntaxError' || error.name === 'UndefinedParserError' ||
-        (java && error.name === 'Error' && error.message.startsWith('Failed to parse:'))),
+        (java && error.name === 'Error' && error.message.startsWith('Failed to parse:')) ||
+        (sql && error.name === 'Error' && error.message.startsWith('Parse error:'))),
     };
   }
 }

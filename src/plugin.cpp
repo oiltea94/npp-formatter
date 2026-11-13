@@ -28,7 +28,7 @@ std::thread worker;
 std::atomic<bool> cancelled{false}, finished{false};
 uint64_t generation = 0;
 bool shuttingDown = false;
-struct Settings { std::wstring node, prettier; DWORD timeoutMs = 10000; };
+struct Settings { std::wstring node, prettier, sqlDialect = L"sql"; DWORD timeoutMs = 10000; };
 Settings settings;
 struct DocumentParser { std::string parser; LRESULT document; };
 std::unordered_map<UINT_PTR, DocumentParser> documentParsers;
@@ -83,6 +83,7 @@ std::wstring readSetting(const wchar_t* key, const wchar_t* fallback) {
 void loadSettings() {
     settings.node = readSetting(L"NodePath", L"");
     settings.prettier = readSetting(L"PrettierPath", L"");
+    settings.sqlDialect = formatter::sqlDialects[formatter::sqlDialectIndex(readSetting(L"SqlDialect", L"sql"))].value;
     settings.timeoutMs = GetPrivateProfileIntW(L"Formatter", L"TimeoutMs", 10000, configPath.c_str());
     if (settings.timeoutMs < 1000 || settings.timeoutMs > 120000) settings.timeoutMs = 10000;
 }
@@ -98,6 +99,7 @@ void saveSettings(const Settings& next) {
     };
     write(L"NodePath", next.node); write(L"PrettierPath", next.prettier);
     write(L"TimeoutMs", std::to_wstring(next.timeoutMs));
+    write(L"SqlDialect", next.sqlDialect);
     WritePrivateProfileStringW(nullptr, nullptr, nullptr, temporary.c_str());
     if (fs::exists(configPath)) {
         fs::path backup = configPath; backup += L".bak";
@@ -136,7 +138,7 @@ void setDetectionStatus(HWND window, Text key, const std::wstring& details = {})
 void updateSettingsLanguage(HWND window) {
     SetWindowTextW(window, tr(Text::SettingsTitle));
     const std::pair<int, Text> controls[] = {
-        {301, Text::NodeLabel}, {302, Text::PrettierLabel}, {304, Text::TimeoutLabel},
+        {301, Text::NodeLabel}, {302, Text::PrettierLabel}, {304, Text::TimeoutLabel}, {306, Text::SqlDialectLabel},
         {201, Text::Browse}, {202, Text::Browse}, {203, Text::Detect}, {204, Text::Detect},
         {IDOK, Text::Save}, {IDCANCEL, Text::Cancel}
     };
@@ -235,9 +237,14 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
             addControl(window, L"BUTTON", tr(Text::Detect), WS_TABSTOP, 608, 104, 100, 26, 204);
             addControl(window, L"STATIC", tr(Text::TimeoutLabel), 0, 16, 144, 420, 20, 304);
             addControl(window, L"EDIT", std::to_wstring(settings.timeoutMs).c_str(), WS_TABSTOP | ES_NUMBER, 450, 140, 150, 26, 104);
-            addControl(window, L"STATIC", L"", 0, 16, 180, 692, 44, 105);
-            addControl(window, L"BUTTON", tr(Text::Save), WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 236, 100, 30, IDOK);
-            addControl(window, L"BUTTON", tr(Text::Cancel), WS_TABSTOP, 608, 236, 100, 30, IDCANCEL);
+            addControl(window, L"STATIC", tr(Text::SqlDialectLabel), 0, 16, 184, 420, 20, 306);
+            addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 450, 180, 258, 300, 106);
+            for (const auto& dialect : formatter::sqlDialects)
+                SendDlgItemMessageW(window, 106, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(dialect.label));
+            SendDlgItemMessageW(window, 106, CB_SETCURSEL, formatter::sqlDialectIndex(settings.sqlDialect), 0);
+            addControl(window, L"STATIC", L"", 0, 16, 220, 692, 44, 105);
+            addControl(window, L"BUTTON", tr(Text::Save), WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 276, 100, 30, IDOK);
+            addControl(window, L"BUTTON", tr(Text::Cancel), WS_TABSTOP, 608, 276, 100, 30, IDCANCEL);
             setDetectionStatus(window, Text::Empty);
             SendMessageW(host._nppHandle, NPPM_MODELESSDIALOG, MODELESSDIALOGADD, reinterpret_cast<LPARAM>(window));
             return 0;
@@ -269,6 +276,8 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
                 if (end != timeout.size() || value < 1000 || value > 120000)
                     throw std::runtime_error(utf8(tr(Text::TimeoutError)));
                 next.timeoutMs = value;
+                auto dialect = SendDlgItemMessageW(window, 106, CB_GETCURSEL, 0, 0);
+                next.sqlDialect = formatter::sqlDialects[dialect >= 0 && static_cast<size_t>(dialect) < std::size(formatter::sqlDialects) ? dialect : 0].value;
                 if (!fs::path(next.node).is_absolute() || !fs::is_regular_file(next.node))
                     throw std::runtime_error(utf8(tr(Text::NodePathError)));
                 if (!fs::path(next.prettier).is_absolute() || !fs::is_regular_file(fs::path(next.prettier) / L"package.json"))
@@ -308,7 +317,7 @@ void openSettings() {
     if (settingsWindow) { SetForegroundWindow(settingsWindow); return; }
     settingsWindow = CreateWindowExW(WS_EX_CONTROLPARENT, L"NppFormatterSettings", tr(Text::SettingsTitle),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, 740, 316, host._nppHandle, nullptr, instance, nullptr);
+        CW_USEDEFAULT, CW_USEDEFAULT, 740, 356, host._nppHandle, nullptr, instance, nullptr);
     if (!settingsWindow) return;
     centerOnHost(settingsWindow);
     ShowWindow(settingsWindow, SW_SHOW);
@@ -427,7 +436,8 @@ void formatCurrentDocument(std::string overrideParser = {}, bool promptForParser
         SendMessageW(host._nppHandle, NPPM_GETFULLPATHFROMBUFFERID, request.bufferId, reinterpret_cast<LPARAM>(filename.data()));
         filename.resize(wcslen(filename.c_str()));
         json payload{{"text", request.text}, {"cursorOffset", wide(request.text.substr(0, request.cursor)).size()},
-            {"prettierPath", utf8(settings.prettier)}, {"endOfLine", sci(editor, SCI_GETEOLMODE) == SC_EOL_CRLF ? "crlf" : "lf"}};
+            {"prettierPath", utf8(settings.prettier)}, {"sqlDialect", utf8(settings.sqlDialect)},
+            {"endOfLine", sci(editor, SCI_GETEOLMODE) == SC_EOL_CRLF ? "crlf" : "lf"}};
         if (fs::path(filename).is_absolute()) payload["filePath"] = utf8(filename);
         if (!overrideParser.empty()) payload["parser"] = overrideParser;
         else if (!payload.contains("filePath")) {
@@ -478,6 +488,12 @@ void applyCompletion() {
             throw std::runtime_error(utf8(tr(Text::JavaPluginMissing)));
         if (result->response.contains("code") && result->response.at("code") == "MISSING_XML_PLUGIN")
             throw std::runtime_error(utf8(tr(Text::XmlPluginMissing)));
+        if (result->response.contains("code") && result->response.at("code") == "MISSING_PHP_PLUGIN")
+            throw std::runtime_error(utf8(tr(Text::PhpPluginMissing)));
+        if (result->response.contains("code") && result->response.at("code") == "MISSING_SQL_PLUGIN")
+            throw std::runtime_error(utf8(tr(Text::SqlPluginMissing)));
+        if (result->response.contains("code") && result->response.at("code") == "MISSING_PROPERTIES_PLUGIN")
+            throw std::runtime_error(utf8(tr(Text::PropertiesPluginMissing)));
         auto error = result->response.value("error", "Invalid bridge response.");
         if (!result->response.value("canChooseParser", false)) throw std::runtime_error(error);
         status(Text::FormatFailed);

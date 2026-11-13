@@ -30,7 +30,7 @@ Inspired by [Formatter for Sublime Text](https://packages.sublimetext.com/packag
 
 > **Current scope:** version 0.1.0 formats whole documents with Prettier. Java is available through the optional `prettier-plugin-java` package. You install the external tools yourself; the plugin neither bundles nor installs Node.js, Prettier, or language packages. More adapters and text transformations are on the [roadmap](#roadmap).
 
-> **Unreleased additions on `main`:** XML through `@prettier/plugin-xml`, plus dedicated JSONC, MDX, and Handlebars picker entries. These additions require a development build; the published 0.1.0 ZIPs do not include them.
+> **Unreleased additions on `main`:** XML, PHP, SQL, and Properties through optional packages, a SQL dialect setting, plus dedicated JSONC, MDX, and Handlebars picker entries. These additions require a development build; the published 0.1.0 ZIPs do not include them.
 
 ## Why NppFormatter?
 
@@ -132,7 +132,7 @@ Select the Prettier directory containing `package.json`, rather than its `bin` d
 
 ## Languages
 
-The development build's language picker offers **16 built-in choices plus Java and XML**. Built-in formats need only Prettier; Java and XML each need an optional package. Actual syntax support depends on your installed formatter versions.
+The development build's language picker offers **16 built-in choices plus Java, XML, PHP, SQL, and Properties**. Built-in formats need only Prettier; each additional language needs its optional package. Actual syntax support depends on your installed formatter versions.
 
 | Language / picker choice | Common saved-file extensions |
 |---|---|
@@ -154,10 +154,13 @@ The development build's language picker offers **16 built-in choices plus Java a
 | Angular HTML | `.component.html` |
 | **Java — optional package** | `.java` |
 | **XML — optional package** | `.xml`, `.svg`, `.xsd`, `.xsl`, `.xslt`, `.xaml`, `.resx` |
+| **PHP — optional package** | `.php`, `.phtml` |
+| **SQL — optional package** | `.sql` |
+| **Properties — optional package** | `.properties` |
 
 **Additional saved-file formats:** Flow (`.js.flow`), MJML (`.mjml`), PostCSS (`.pcss`, `.postcss`), and JSON.stringify-style JSON (`.importmap`). Prettier infers these from the path; they have no dedicated picker entries. Project configuration can also select a built-in parser such as `lwc`. The extensions above are examples, not an exhaustive list.
 
-**Untitled documents:** automatic Notepad++ language mapping covers JavaScript, TypeScript, Java, XML, JSON, JSON5, HTML, CSS, and YAML. Use **Format with language...** for other picker choices. MDX and Handlebars are distinct formats; selecting Markdown or HTML is not equivalent. C/C++ and Python formatting remain planned.
+**Untitled documents:** automatic Notepad++ language mapping covers JavaScript, TypeScript, Java, XML, PHP, SQL, Properties, JSON, JSON5, HTML, CSS, and YAML. Use **Format with language...** for other picker choices. MDX and Handlebars are distinct formats; selecting Markdown or HTML is not equivalent. C/C++ and Python formatting remain planned.
 
 ### Optional Java support
 
@@ -198,13 +201,39 @@ The default `xmlWhitespaceSensitivity: "strict"` preserves meaningful whitespace
 
 JSONC, MDX, and Handlebars use Prettier's built-in parsers and need no additional package.
 
+### Optional PHP, SQL, and Properties support (unreleased)
+
+Install only the packages you need alongside your global Prettier:
+
+```powershell
+npm install --global @prettier/plugin-php@0.26.0
+npm install --global prettier-plugin-sql@0.20.0
+npm install --global prettier-plugin-properties@0.3.1
+```
+
+For a project-local installation, replace `--global` with `--save-dev --save-exact` and run the command in that project. These packages use the same discovery and missing-dependency guidance as Java and XML. No PHP executable or database connection is needed. Untitled files can follow the matching Notepad++ language or use the language picker.
+
+- **PHP:** formats `.php` and `.phtml`. Pure PHP is the primary use case; the upstream plugin considers mixed PHP/HTML formatting unstable.
+- **SQL:** formats `.sql`. Select the default **SQL dialect** in Settings; it starts with standard SQL and includes MySQL, MariaDB, PostgreSQL, SQLite, SQL Server, Oracle, BigQuery, and other dialects. Save to apply; Cancel discards the change. Saved files honor the project's `language` option first. A project selecting `formatter: "node-sql-parser"` uses its own `database` option instead. The default engine does not support stored procedures or custom statement delimiters.
+- **Properties:** formats `.properties`, including comments, duplicate keys, and escaped values. Output keeps Unicode by default. Project options `escapeNonLatin1: true` and `keySeparator` control Unicode escapes and key/value separators. The editor buffer must still be UTF-8.
+
+To use PostgreSQL for a project's SQL files, add this Prettier override:
+
+```json
+{
+  "overrides": [
+    { "files": "*.sql", "options": { "language": "postgresql" } }
+  ]
+}
+```
+
 ## Usage
 
 | Command | What it does |
 |---|---|
 | **Format document** | Formats the entire current buffer, including unsaved changes |
 | **Format with language...** | Overrides the language for this operation, keeping the file type, remembered choice, project options, and ignore rules |
-| **Settings...** | Configures Node.js, Prettier, and the request timeout |
+| **Settings...** | Configures Node.js, Prettier, the SQL dialect, and the request timeout |
 | **About** | Shows the version, supported formats, runtime requirements, and clickable project homepage |
 
 **Saved files** use their path for parser inference and project configuration. **Untitled files** use a supported Notepad++ document language; plain text containing valid JSON is detected automatically. Otherwise, a picker appears and remembers your choice for that document during the current session.
@@ -262,6 +291,8 @@ Settings live in `NppFormatter.ini` in the plugin configuration directory suppli
 | Parser or syntax error | Open the original diagnostic, correct the code, or explicitly choose another language |
 | Java package is missing | Install `prettier-plugin-java` as described above, then retry |
 | XML package is missing | Install `@prettier/plugin-xml` in the project or alongside the selected Prettier, then retry |
+| PHP / SQL / Properties package is missing | Install the corresponding package above, then retry |
+| SQL dialect error | Select the matching dialect in Settings or set the project’s `language` option |
 | Compact XML stays on one line | XML preserves significant whitespace by default; see the XML configuration above |
 | File is ignored / result discarded | Check `.prettierignore`; retry after editing, saving, or switching documents |
 | Request times out | Inspect project configuration and plugins; adjust the request timeout if needed |
@@ -291,7 +322,7 @@ The bootstrap downloads SHA-256-pinned **LLVM-MinGW 20261104 / UCRT**. The compi
 
 | Command | Purpose |
 |---|---|
-| `npm test` | Real Prettier, Java, and XML integration tests |
+| `npm test` | Real Prettier and optional language package integration tests |
 | `python -m unittest discover -s tests -p test_artifacts.py` | Check built DLLs and ZIP rejection cases |
 | `python -m unittest discover -s tests -p test_catalog.py` | Check catalog updates and PR reuse without API writes |
 | `python tests/download_npp.py --arch x64` | Download the hash-verified portable test editor |

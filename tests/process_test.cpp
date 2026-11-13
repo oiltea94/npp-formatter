@@ -22,11 +22,15 @@ int wmain(int argc, wchar_t** argv) {
         std::cout << "PASS host locale selection, English fallback and translation coverage\n";
         for (auto [language, parser] : {std::pair{L_JAVASCRIPT, "babel"}, {L_JS_EMBEDDED, "babel"},
              {L_TYPESCRIPT, "typescript"}, {L_JAVA, "java"}, {L_JSON, "json"}, {L_JSON5, "json5"},
-             {L_HTML, "html"}, {L_XML, "xml"}, {L_CSS, "css"}, {L_YAML, "yaml"}})
+             {L_HTML, "html"}, {L_XML, "xml"}, {L_CSS, "css"}, {L_YAML, "yaml"},
+             {L_PHP, "php"}, {L_SQL, "sql"}, {L_PROPS, "dot-properties"}})
             check(std::string(formatter::parserForLanguage(language)) == parser, "Host parser mapping failed");
         for (int language : {L_TEXT, L_PYTHON, L_USER, L_EXTERNAL})
             check(formatter::parserForLanguage(language) == nullptr, "Unsupported language was guessed");
         std::cout << "PASS document-language parser mapping and unsupported-language fallback\n";
+        check(formatter::sqlDialectIndex(L"missing") == 0, "Invalid SQL dialect must fall back to SQL");
+        for (size_t i = 0; i < std::size(formatter::sqlDialects); ++i)
+            check(formatter::sqlDialectIndex(formatter::sqlDialects[i].value) == i, "SQL dialect setting round trip failed");
         if (argc != 3) throw std::runtime_error("Usage: process_test.exe node.exe fixture.cjs");
         std::atomic<bool> cancel{false};
         auto invoke = [&](const nlohmann::json& request, DWORD timeout = 5000) {

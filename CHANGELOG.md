@@ -2,6 +2,12 @@
 
 ## Unreleased / 尚未发布
 
+- Add optional PHP, SQL, and Properties formatting with user-installed npm packages, automatic discovery, and localized install-and-retry guidance.
+- Add a persistent SQL dialect setting; saved documents prioritize project configuration, and unsaved selections survive live interface language changes.
+
+- 通过用户自行安装的 npm 扩展支持 PHP、SQL 和 Properties，自动查找依赖并提供三语安装重试提示。
+- 新增可保存的 SQL 方言设置，已保存文档优先遵循项目配置，切换界面语言时保留尚未保存的选择。
+
 - Format XML, SVG, XSD, XSL/XSLT, XAML, and RESX with the separately installed `@prettier/plugin-xml` package. Discover it automatically and preserve XML whitespace semantics by default.
 - Add dedicated JSONC, MDX, and Handlebars choices using Prettier's built-in parsers.
 - Explain the optional XML dependency in English, Simplified Chinese, and Traditional Chinese, including install-and-retry guidance.

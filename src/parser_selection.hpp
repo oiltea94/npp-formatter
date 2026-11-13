@@ -1,6 +1,8 @@
 #pragma once
 #include <windows.h>
 #include "Notepad_plus_msgs.h"
+#include <iterator>
+#include <string_view>
 
 namespace formatter {
 inline const char* parserForLanguage(int language) {
@@ -8,6 +10,9 @@ inline const char* parserForLanguage(int language) {
     case L_JAVASCRIPT: case L_JS_EMBEDDED: return "babel";
     case L_TYPESCRIPT: return "typescript";
     case L_JAVA: return "java";
+    case L_PHP: return "php";
+    case L_SQL: return "sql";
+    case L_PROPS: return "dot-properties";
     case L_JSON: return "json";
     case L_JSON5: return "json5";
     case L_HTML: return "html";
@@ -27,5 +32,23 @@ inline constexpr ParserChoice parserChoices[] = {
     {L"Vue", "vue"}, {L"Angular HTML", "angular"},
     {L"Java", "java"},
     {L"XML", "xml"}, {L"JSONC", "jsonc"}, {L"MDX", "mdx"}, {L"Handlebars", "glimmer"},
+    {L"PHP", "php"}, {L"SQL", "sql"}, {L"Properties", "dot-properties"},
 };
+
+struct SqlDialect { const wchar_t* label; const wchar_t* value; };
+inline constexpr SqlDialect sqlDialects[] = {
+    {L"SQL", L"sql"}, {L"MySQL", L"mysql"}, {L"MariaDB", L"mariadb"},
+    {L"PostgreSQL", L"postgresql"}, {L"SQLite", L"sqlite"},
+    {L"SQL Server (T-SQL)", L"transactsql"}, {L"Oracle (PL/SQL)", L"plsql"},
+    {L"BigQuery", L"bigquery"}, {L"Snowflake", L"snowflake"},
+    {L"IBM Db2", L"db2"}, {L"IBM Db2 for i", L"db2i"}, {L"Hive", L"hive"},
+    {L"Couchbase N1QL", L"n1ql"}, {L"Redshift", L"redshift"},
+    {L"SingleStoreDB", L"singlestoredb"}, {L"Spark", L"spark"},
+    {L"Trino", L"trino"}, {L"ClickHouse", L"clickhouse"},
+};
+inline size_t sqlDialectIndex(std::wstring_view value) {
+    for (size_t i = 0; i < std::size(sqlDialects); ++i)
+        if (value == sqlDialects[i].value) return i;
+    return 0;
+}
 } // namespace formatter

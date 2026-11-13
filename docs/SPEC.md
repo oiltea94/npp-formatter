@@ -85,6 +85,14 @@ Implemented slices:
    strict whitespace default; honor project overrides. Localize missing-package
    guidance and preserve the document on errors. Add dedicated JSONC, MDX, and
    Handlebars entries backed by Prettier's built-in jsonc, mdx, and glimmer parsers.
+8. PHP, SQL, and Properties support (unreleased): discover @prettier/plugin-php,
+   prettier-plugin-sql, and prettier-plugin-properties using the same rules.
+   Map the matching host languages and expose explicit picker choices. Persist
+   SqlDialect with standard SQL as the default; invalid stored values fall back
+   to that default. Apply it only to SQL using sql-formatter, before project
+   configuration. Projects using node-sql-parser retain their database setting.
+   Save commits the selection; Cancel discards it. Live UI translation preserves
+   the current selection. Missing packages and syntax failures retain the text.
 
 The supported build targets are Notepad++ x86, x64, and ARM64 with UTF-8 Scintilla buffers. Existing non-UTF-8
 buffers receive a clear message asking the user to convert the encoding first.
@@ -131,6 +139,9 @@ publishing externally or replacing an existing user installation.
 - Apply the same dependency behavior to XML. Preserve mixed text, entities,
   CDATA, Unicode cursor positions, and LF/CRLF; follow project whitespace options.
 - Exercise XML and the JSONC/MDX/Handlebars picker entries in the real editor.
+- Exercise PHP, SQL, and Properties discovery, picker choices, saved files,
+  localized missing dependencies, installation retry, and single undo. Verify
+  SQL dialect persistence, Cancel, live translation, and project precedence.
 - Error/timeout/invalid response/stale result leaves original text untouched.
 - One undo restores the previous text; a no-op leaves the undo stack untouched.
 - Editor remains responsive while a child process is running.

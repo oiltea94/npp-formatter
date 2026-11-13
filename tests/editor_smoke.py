@@ -312,7 +312,9 @@ def run(sandbox, architecture, language='en'):
         for identifier, key in ((201, 'browse'), (202, 'browse'), (203, 'detect'), (204, 'detect'), (1, 'save'), (2, 'cancel')):
             assert control_text(dialog, identifier) == labels[key]
         assert not get_control(dialog, 103), 'Global untitled parser setting should be removed'
-        for identifier in (301, 302, 304):
+        assert control_text(dialog, 106) == 'SQL', 'Old settings must default to standard SQL'
+        send(get_control(dialog, 106), 0x14E, 1, 0)  # MySQL, not saved until Save.
+        for identifier in (301, 302, 304, 306):
             label = control_text(dialog, identifier)
             assert label
             if language != 'en':
@@ -353,6 +355,7 @@ def run(sandbox, architecture, language='en'):
         assert USER32.SetWindowPos(main_window, None, monitor.work.left - 200, monitor.work.top + 40, 820, 600, 0x14)
         dialog = open_settings()
         assert control_text(dialog, 102) == str(ROOT / 'node_modules' / 'prettier')
+        assert control_text(dialog, 106) == 'SQL', 'Cancel persisted the SQL dialect'
         USER32.PostMessageW(dialog, 0x111, 203, 0)
         until(lambda: labels['detecting'] in control_text(dialog, 105))
         started = time.monotonic()
@@ -365,11 +368,13 @@ def run(sandbox, architecture, language='en'):
                                   original_bounds.bottom - original_bounds.top, 0x14)
         dialog = open_settings()
         detect(dialog, 204)
+        send(get_control(dialog, 106), 0x14E, 1, 0)
         USER32.PostMessageW(dialog, 0x111, 1, 0)
         until(lambda: not USER32.IsWindow(dialog))
         saved = configparser.ConfigParser(interpolation=None)
         saved.read(ini_path, encoding='utf-16')
         assert 'UntitledParser' not in saved['Formatter'], 'Legacy global parser was written back'
+        assert saved['Formatter']['SqlDialect'] == 'mysql'
         assert os.path.samefile(saved['Formatter']['PrettierPath'], project_prettier), 'Saved Prettier path differs from detected package'
         assert os.path.samefile(saved['Formatter']['NodePath'], node), 'Saved Node path differs from detected executable'
         assert ini_path.with_suffix('.ini.bak').read_bytes() == before
@@ -378,6 +383,8 @@ def run(sandbox, architecture, language='en'):
 
         if language == 'en':
             dialog = open_settings()
+            assert control_text(dialog, 106) == 'MySQL'
+            send(get_control(dialog, 106), 0x14E, 5, 0)  # SQL Server, unsaved.
             set_control(dialog, 101, '')
             set_control(dialog, 102, 'unsaved path')
             set_control(dialog, 104, '15000')
@@ -418,6 +425,12 @@ def run(sandbox, architecture, language='en'):
                 assert control_text(dialog, 105).startswith(translated['detected'])
                 assert control_text(dialog, 102) == 'unsaved path'
                 assert control_text(dialog, 104) == '15000'
+                assert control_text(dialog, 106) == 'SQL Server (T-SQL)'
+                assert control_text(dialog, 306) == {
+                    'en': 'SQL dialect (project config takes priority)',
+                    'zh-CN': 'SQL 方言（项目配置优先）',
+                    'zh-TW': 'SQL 方言（專案設定優先）',
+                }[target]
             # The General page containing the combo is a child of Preferences.
             preferences = USER32.GetParent(USER32.GetParent(combo))
             USER32.PostMessageW(preferences, 0x10, 0, 0)
@@ -446,6 +459,8 @@ def run(sandbox, architecture, language='en'):
         assert labels['about_body'] in about_text, about_text
         assert 'prettier-plugin-java' in about_text, 'About must explain the optional Java dependency'
         assert '@prettier/plugin-xml' in about_text, 'About must explain the optional XML dependency'
+        for package in ('@prettier/plugin-php', 'prettier-plugin-sql', 'prettier-plugin-properties'):
+            assert package in about_text, f'About must explain {package}'
         for name in ('JSONC', 'MDX', 'Handlebars'):
             assert name in about_text, f'About must include {name}'
         homepage = 'https://github.com/oiltea94/npp-formatter'
@@ -812,7 +827,81 @@ def run(sandbox, architecture, language='en'):
             until(lambda: text(editor) == expected_text)
         assert ini_path.read_bytes() == settings_before_parsers
         print('PASS language picker: JSONC, MDX and Handlebars without extra packages', flush=True)
-        report = {'architecture': architecture, 'language': language, 'checks': 19,
+        installed = set()
+
+        def install_test_package(name):
+            if name in installed:
+                return
+            installed.add(name)
+            package_dir = ROOT / 'node_modules' / name
+            shutil.copytree(package_dir, sandbox / 'node_modules' / name, dirs_exist_ok=True)
+            metadata = json.loads((package_dir / 'package.json').read_text(encoding='utf-8'))
+            for dependency in metadata.get('dependencies', {}):
+                install_test_package(dependency)
+
+        for name, package, host_language, extension, source, formatted in (
+            ('PHP', '@prettier/plugin-php', 1, 'php', '<?php $answer=1+2;', '<?php $answer = 1 + 2;\n'),
+            ('SQL', 'prettier-plugin-sql', 17, 'sql', 'select a,b from users;', 'select\n  a,\n  b\nfrom\n  users;\n'),
+            ('Properties', 'prettier-plugin-properties', 34, 'properties', 'greeting=中文😀', 'greeting = 中文😀\n'),
+        ):
+            new_document(source, host_language)
+            USER32.PostMessageW(main_window, 0x111, command, 0)
+            missing = until(lambda: next((w for w in windows(process.pid)
+                                         if window_class(w) == '#32770' and window_title(w) == SETTING_ERRORS[language][0]), None))
+            message = automation.text(missing)
+            expected_message = (f'{name} formatting requires {package}.' if language == 'en'
+                                else f'{name} 格式化需要 {package}。')
+            assert expected_message in message, message
+            assert f'npm install --global {package}' in message
+            assert text(editor) == source
+            USER32.PostMessageW(missing, 0x10, 0, 0)
+            until(lambda: not USER32.IsWindow(missing))
+            install_test_package(package)
+            send(editor, 2171, 0, 0)
+            format_to(formatted)
+            send(editor, 2176, 0, 0)
+            assert text(editor) == source, f'{name} formatting must be one undo action'
+            new_document(source)
+            choose(open_picker(), name)
+            until(lambda: text(editor) == formatted)
+            new_document(source)
+            filename = str(sandbox / f'example.{extension}').encode('utf-16-le') + b'\0\0'
+            assert KERNEL32.WriteProcessMemory(handle, memory, C.c_char_p(filename), len(filename), None)
+            assert send(main_window, 2024 + 78, 0, memory)
+            format_to(formatted)
+            print(f'PASS {name}: localized dependency guidance, install/retry, host language, picker, saved file and undo', flush=True)
+
+        bracket_sql = 'select [name] from [users];'
+        formatted_sql = 'select\n  [name]\nfrom\n  [users];\n'
+        new_document(bracket_sql, 17)
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        error_dialog = wait_parse_error()
+        automation.invoke(error_dialog, PARSE_ERRORS[language][1])
+        until(lambda: 'Parse error:' in automation.text(error_dialog))
+        assert text(editor) == bracket_sql
+        USER32.PostMessageW(error_dialog, 0x10, 0, 0)
+        until(lambda: not USER32.IsWindow(error_dialog))
+        dialog = open_settings()
+        assert control_text(dialog, 106) == 'MySQL'
+        send(get_control(dialog, 106), 0x14E, 5, 0)
+        USER32.PostMessageW(dialog, 0x111, 1, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        format_to(formatted_sql)
+        dialog = open_settings()
+        assert control_text(dialog, 106) == 'SQL Server (T-SQL)'
+        send(get_control(dialog, 106), 0x14E, 1, 0)
+        USER32.PostMessageW(dialog, 0x111, 1, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        new_document(bracket_sql, 17)
+        filename = str(sandbox / 'override.sql').encode('utf-16-le') + b'\0\0'
+        assert KERNEL32.WriteProcessMemory(handle, memory, C.c_char_p(filename), len(filename), None)
+        assert send(main_window, 2024 + 78, 0, memory)
+        project_config.write_text('module.exports={language:"transactsql"};', encoding='utf-8')
+        format_to(formatted_sql)
+        project_config.unlink()
+        assert ini_path.read_bytes() == settings_before_parsers
+        print('PASS SQL dialect: persisted setting, original error, retry after change and project precedence', flush=True)
+        report = {'architecture': architecture, 'language': language, 'checks': 23,
                   'live_language_switch': language == 'en', 'result': 'PASS'}
         (ROOT / 'build' / architecture / f'editor-smoke-{language}.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     finally:

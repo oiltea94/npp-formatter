@@ -30,7 +30,7 @@
 
 > **当前范围：** 0.1.0 原型支持使用 Prettier 格式化全文，Java 通过可选的 `prettier-plugin-java` 扩展支持。外部工具由用户自行安装；插件不捆绑或安装 Node.js、Prettier 和语言扩展包。更多适配器与文本转换功能见[路线图](#roadmap)。
 
-> **`main` 分支尚未发布的新增功能：** 通过 `@prettier/plugin-xml` 支持 XML，并新增 JSONC、MDX、Handlebars 独立语言选项。这些功能需使用开发构建，已发布的 0.1.0 安装包尚未包含。
+> **`main` 分支尚未发布的新增功能：** 通过可选扩展支持 XML、PHP、SQL 和 Properties，新增 SQL 方言设置，以及 JSONC、MDX、Handlebars 独立语言选项。这些功能需使用开发构建，已发布的 0.1.0 安装包尚未包含。
 
 ## 为什么使用 NppFormatter？
 
@@ -136,7 +136,7 @@ node -p "require('path').dirname(require.resolve('prettier/package.json'))"
 
 ## 支持的语言
 
-开发构建的语言选择器提供 **16 个内置选项，以及 Java 和 XML**。内置格式只需 Prettier；Java 和 XML 各需一个可选扩展包。具体语法支持取决于安装的格式化工具版本。
+开发构建的语言选择器提供 **16 个内置选项，以及 Java、XML、PHP、SQL 和 Properties**。内置格式只需 Prettier；其他语言各需对应的可选扩展包。具体语法支持取决于安装的格式化工具版本。
 
 | 语言 / 选择器选项 | 常见已保存文件扩展名 |
 |---|---|
@@ -158,10 +158,13 @@ node -p "require('path').dirname(require.resolve('prettier/package.json'))"
 | Angular HTML | `.component.html` |
 | **Java — 可选扩展包** | `.java` |
 | **XML — 可选扩展包** | `.xml`、`.svg`、`.xsd`、`.xsl`、`.xslt`、`.xaml`、`.resx` |
+| **PHP — 可选扩展包** | `.php`、`.phtml` |
+| **SQL — 可选扩展包** | `.sql` |
+| **Properties — 可选扩展包** | `.properties` |
 
 **已保存文件还支持：** Flow（`.js.flow`）、MJML（`.mjml`）、PostCSS（`.pcss`、`.postcss`）和 JSON.stringify 风格的 JSON（`.importmap`）。这些格式由 Prettier 根据路径推断，选择器中暂未提供独立选项。项目配置也可显式指定 `lwc` 等内置解析器。上表仅列出常见扩展名。
 
-**未保存文档：** 自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、Java、XML、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可通过**按指定语言格式化...** 使用。MDX 和 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。C/C++ 和 Python 格式化仍在规划中。
+**未保存文档：** 自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、Java、XML、PHP、SQL、Properties、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可通过**按指定语言格式化...** 使用。MDX 和 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。C/C++ 和 Python 格式化仍在规划中。
 
 ### 可选的 Java 支持
 
@@ -202,6 +205,32 @@ XML 沿用 Java 的扩展查找顺序和缺失提示，优先遵循项目显式�
 
 JSONC、MDX 和 Handlebars 使用 Prettier 内置解析器，无需额外安装扩展包。
 
+### 可选的 PHP、SQL 和 Properties 支持（尚未发布）
+
+如果 Prettier 是全局安装，按需安装对应扩展：
+
+```powershell
+npm install --global @prettier/plugin-php@0.26.0
+npm install --global prettier-plugin-sql@0.20.0
+npm install --global prettier-plugin-properties@0.3.1
+```
+
+项目内安装时，将 `--global` 换成 `--save-dev --save-exact`，在对应项目中执行。这些扩展沿用 Java 和 XML 的查找顺序及缺失提示，无需 PHP 可执行程序或数据库连接。未保存文档可跟随 Notepad++ 中对应的文档语言，也可使用语言选择器。
+
+- **PHP：** 支持 `.php` 和 `.phtml`，以纯 PHP 为主要使用场景；上游扩展仍将 PHP/HTML 混排格式化标为不稳定。
+- **SQL：** 支持 `.sql`。在配置中选择默认的 **SQL 方言**，初始为标准 SQL，包含 MySQL、MariaDB、PostgreSQL、SQLite、SQL Server、Oracle、BigQuery 等选项。点击保存后生效，取消则放弃修改。已保存文件优先遵循项目的 `language` 配置；项目选择 `formatter: "node-sql-parser"` 时，改用项目的 `database` 配置。默认引擎不支持存储过程和自定义语句分隔符。
+- **Properties：** 支持 `.properties`，保留注释、重复键和转义值，默认输出 Unicode。项目可通过 `escapeNonLatin1: true` 和 `keySeparator` 控制 Unicode 转义及键值分隔符，编辑器文档仍需使用 UTF-8。
+
+让项目中的 SQL 文件使用 PostgreSQL，可加入以下 Prettier 覆盖规则：
+
+```json
+{
+  "overrides": [
+    { "files": "*.sql", "options": { "language": "postgresql" } }
+  ]
+}
+```
+
 <a id="usage"></a>
 
 ## 日常使用
@@ -210,7 +239,7 @@ JSONC、MDX 和 Handlebars 使用 Prettier 内置解析器，无需额外安装�
 |---|---|
 | **格式化文档** | 格式化当前缓冲区全文，包含尚未保存的修改 |
 | **按指定语言格式化...** | 仅本次覆盖语言选择，保留文件类型、记住的选择、项目选项和忽略规则 |
-| **配置...** | 设置 Node.js、Prettier 和请求超时时间 |
+| **配置...** | 设置 Node.js、Prettier、SQL 方言和请求超时时间 |
 | **关于** | 显示版本、支持的格式、运行要求，以及可点击的项目主页 |
 
 **已保存文件**通过路径推断解析器并查找项目配置。**未保存文件**优先使用 Notepad++ 中受支持的文档语言；纯文本中的有效 JSON 会被自动识别。其他情况弹出语言选择窗口，选择仅在当前会话中为该文档记住。
@@ -270,6 +299,8 @@ JSONC、MDX 和 Handlebars 使用 Prettier 内置解析器，无需额外安装�
 | 解析器或语法报错 | 查看原始诊断，修正代码，或显式选择其他语言 |
 | 提示缺少 Java 扩展包 | 按上文安装 `prettier-plugin-java` 后重试 |
 | 提示缺少 XML 扩展包 | 在项目内或所选 Prettier 的同一位置安装 `@prettier/plugin-xml` 后重试 |
+| 提示缺少 PHP / SQL / Properties 扩展包 | 按上文安装对应扩展包后重试 |
+| SQL 方言报错 | 在配置中选择对应方言，或设置项目的 `language` 选项 |
 | 紧凑 XML 格式化后仍是单行 | 默认保留有意义的空白；参见上面的 XML 配置说明 |
 | 文件被忽略 / 结果被丢弃 | 检查 `.prettierignore`；完成编辑、保存或切换文档后重试 |
 | 请求超时 | 检查项目配置和插件，按需调整请求超时 |
@@ -301,7 +332,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architect
 
 | 命令 | 用途 |
 |---|---|
-| `npm test` | 使用真实 Prettier、Java 和 XML 扩展验证集成 |
+| `npm test` | 使用真实 Prettier 和可选语言扩展验证集成 |
 | `python -m unittest discover -s tests -p test_artifacts.py` | 检查已构建的 DLL、ZIP 和错误产物拒绝情况 |
 | `python -m unittest discover -s tests -p test_catalog.py` | 验证目录更新和 PR 复用，不写入 GitHub API |
 | `python tests/download_npp.py --arch x64` | 下载经过哈希校验的便携测试编辑器 |
