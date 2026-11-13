@@ -11,6 +11,7 @@
 #include "bridge_process.hpp"
 #include "dependency_discovery.hpp"
 #include "ruff_adapter.hpp"
+#include "clang_format_adapter.hpp"
 #include "i18n.hpp"
 #include "parser_selection.hpp"
 
@@ -29,7 +30,7 @@ std::thread worker;
 std::atomic<bool> cancelled{false}, finished{false};
 uint64_t generation = 0;
 bool shuttingDown = false;
-struct Settings { std::wstring node, prettier, ruff, sqlDialect = L"sql"; int shellDialect = 1; DWORD timeoutMs = 10000; };
+struct Settings { std::wstring node, prettier, ruff, clang, clangStyle = L"LLVM", sqlDialect = L"sql"; int shellDialect = 1; DWORD timeoutMs = 10000; };
 Settings settings;
 struct DocumentParser { std::string parser; LRESULT document; };
 std::unordered_map<UINT_PTR, DocumentParser> documentParsers;
@@ -86,6 +87,8 @@ void loadSettings() {
     settings.node = readSetting(L"NodePath", L"");
     settings.prettier = readSetting(L"PrettierPath", L"");
     settings.ruff = readSetting(L"RuffPath", L"");
+    settings.clang = readSetting(L"ClangFormatPath", L"");
+    settings.clangStyle = formatter::clangStyle(readSetting(L"ClangFormatStyle", L"LLVM"));
     settings.sqlDialect = formatter::sqlDialects[formatter::sqlDialectIndex(readSetting(L"SqlDialect", L"sql"))].value;
     settings.shellDialect = formatter::shellDialects[formatter::shellDialectIndex(
         GetPrivateProfileIntW(L"Formatter", L"ShellDialect", 1, configPath.c_str()))].value;
@@ -104,6 +107,7 @@ void saveSettings(const Settings& next) {
     };
     write(L"NodePath", next.node); write(L"PrettierPath", next.prettier);
     write(L"RuffPath", next.ruff);
+    write(L"ClangFormatPath", next.clang); write(L"ClangFormatStyle", next.clangStyle);
     write(L"TimeoutMs", std::to_wstring(next.timeoutMs));
     write(L"SqlDialect", next.sqlDialect);
     write(L"ShellDialect", std::to_wstring(next.shellDialect));
@@ -124,15 +128,15 @@ void addControl(HWND parent, const wchar_t* kind, const wchar_t* text,
     SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)), TRUE);
 }
 void browse(HWND window, int field) {
-    bool node = field == 101, ruff = field == 109;
+    bool node = field == 101, ruff = field == 109, clang = field == 111;
     wchar_t path[32768]{};
     OPENFILENAMEW dialog{};
     dialog.lStructSize = sizeof(dialog); dialog.hwndOwner = window;
     dialog.lpstrFile = path; dialog.nMaxFile = 32768;
-    dialog.lpstrFilter = tr(ruff ? Text::RuffFilter : node ? Text::NodeFilter : Text::PrettierFilter);
+    dialog.lpstrFilter = tr(clang ? Text::ClangFilter : ruff ? Text::RuffFilter : node ? Text::NodeFilter : Text::PrettierFilter);
     dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     if (GetOpenFileNameW(&dialog)) {
-        std::wstring selected = (node || ruff) ? std::wstring(path) : fs::path(path).parent_path().wstring();
+        std::wstring selected = (node || ruff || clang) ? std::wstring(path) : fs::path(path).parent_path().wstring();
         SetDlgItemTextW(window, field, selected.c_str());
     }
 }
@@ -166,6 +170,7 @@ void showEnvironmentReport(HWND window) {
     else text += std::wstring(tr(Text::EnvironmentNotChecked)) + L"\r\n";
     auto tools = report.at("plugins");
     if (report.contains("ruff")) tools.push_back(report.at("ruff"));
+    if (report.contains("clang")) tools.push_back(report.at("clang"));
     for (const auto& item : tools) {
         text += wide(item.at("name").get<std::string>()) + L": " + state(item) +
             L" " + wide(item.value("version", "")) + L"\r\n";
@@ -180,6 +185,7 @@ void updateSettingsLanguage(HWND window) {
         {301, Text::NodeLabel}, {302, Text::PrettierLabel}, {304, Text::TimeoutLabel}, {306, Text::SqlDialectLabel}, {307, Text::ShellDialectLabel},
         {201, Text::Browse}, {202, Text::Browse}, {203, Text::Detect}, {204, Text::Detect},
         {205, Text::EnvironmentCheck}, {309, Text::RuffLabel}, {209, Text::Browse}, {210, Text::Detect},
+        {311, Text::ClangLabel}, {211, Text::Browse}, {212, Text::Detect}, {312, Text::ClangStyleLabel},
         {IDOK, Text::Save}, {IDCANCEL, Text::Cancel}
     };
     for (auto [id, key] : controls) SetDlgItemTextW(window, id, tr(key));
@@ -218,7 +224,7 @@ void refreshLanguage() {
     if (lastStatus != Text::Empty) status(lastStatus);
 }
 void detectionControls(HWND window, bool enabled) {
-    for (int id : {101, 102, 109, 201, 202, 203, 204, 205, 209, 210, IDOK})
+    for (int id : {101, 102, 109, 111, 112, 201, 202, 203, 204, 205, 209, 210, 211, 212, IDOK})
         EnableWindow(GetDlgItem(window, id), enabled);
 }
 void stopDetection() {
@@ -228,11 +234,13 @@ void stopDetection() {
 }
 void startDetection(HWND window, int action) {
     if (detectionWorker.joinable()) return;
-    const bool node = action == 203, environment = action == 205, ruff = action == 210;
+    const bool node = action == 203, environment = action == 205, ruff = action == 210, clang = action == 212;
     auto selectedRuff = controlText(window, 109);
+    auto selectedClang = controlText(window, 111);
+    auto selectedStyle = formatter::clangStyle(controlText(window, 112));
     auto selectedNode = controlText(window, 101);
     auto selectedPrettier = controlText(window, 102);
-    if (!node && !ruff && !environment && (selectedNode.empty() || !fs::path(selectedNode).is_absolute() || !fs::is_regular_file(selectedNode))) {
+    if (!node && !ruff && !clang && !environment && (selectedNode.empty() || !fs::path(selectedNode).is_absolute() || !fs::is_regular_file(selectedNode))) {
         setDetectionStatus(window, Text::NodeFirst);
         return;
     }
@@ -243,10 +251,11 @@ void startDetection(HWND window, int action) {
     detectionCancelled = false; detectionFinished = false;
     if (!SetTimer(window, 2, 50, nullptr)) throw std::runtime_error(utf8(tr(Text::DetectionTimerError)));
     try {
-        detectionWorker = std::thread([node, environment, ruff, selectedRuff, selectedNode, selectedPrettier, filePath, bridge] {
-            DetectionResult result{environment ? 108 : ruff ? 109 : node ? 101 : 102, {}, {}};
+        detectionWorker = std::thread([node, environment, ruff, clang, selectedRuff, selectedClang, selectedStyle, selectedNode, selectedPrettier, filePath, bridge] {
+            DetectionResult result{environment ? 108 : clang ? 111 : ruff ? 109 : node ? 101 : 102, {}, {}};
             try {
-                if (ruff) result.path = formatter::detectRuff(selectedRuff, filePath, detectionCancelled);
+                if (clang) result.path = formatter::detectClangFormat(selectedClang, detectionCancelled);
+                else if (ruff) result.path = formatter::detectRuff(selectedRuff, filePath, detectionCancelled);
                 else if (environment) {
                     json report{{"node", {{"status", "missing"}, {"path", utf8(selectedNode)}}},
                                 {"prettier", {{"status", "missing"}, {"path", utf8(selectedPrettier)}}}, {"plugins", json::array()}};
@@ -264,6 +273,7 @@ void startDetection(HWND window, int action) {
                         }
                     }
                     if (!detectionCancelled) report["ruff"] = formatter::checkRuff(selectedRuff, filePath, detectionCancelled);
+                    if (!detectionCancelled) report["clang"] = formatter::checkClangFormat(selectedClang, filePath, selectedStyle, detectionCancelled);
                     report["document"] = utf8(filePath);
                     result.report = std::move(report);
                 }
@@ -288,7 +298,7 @@ void startDetection(HWND window, int action) {
     detectionControls(window, false);
     environmentReport = nullptr;
     showEnvironmentReport(window);
-    setDetectionStatus(window, environment ? Text::CheckingEnvironment : ruff ? Text::DetectRuff : node ? Text::DetectNode : Text::DetectPrettier);
+    setDetectionStatus(window, environment ? Text::CheckingEnvironment : clang ? Text::DetectClang : ruff ? Text::DetectRuff : node ? Text::DetectNode : Text::DetectPrettier);
 }
 LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
     try {
@@ -305,24 +315,33 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
             addControl(window, L"EDIT", settings.ruff.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 168, 480, 26, 109);
             addControl(window, L"BUTTON", tr(Text::Browse), WS_TABSTOP, 504, 168, 96, 26, 209);
             addControl(window, L"BUTTON", tr(Text::Detect), WS_TABSTOP, 608, 168, 100, 26, 210);
-            addControl(window, L"STATIC", tr(Text::TimeoutLabel), 0, 16, 208, 420, 20, 304);
-            addControl(window, L"EDIT", std::to_wstring(settings.timeoutMs).c_str(), WS_TABSTOP | ES_NUMBER, 450, 204, 150, 26, 104);
-            addControl(window, L"STATIC", tr(Text::SqlDialectLabel), 0, 16, 248, 420, 20, 306);
-            addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 450, 244, 258, 300, 106);
+            addControl(window, L"STATIC", tr(Text::ClangLabel), 0, 16, 208, 692, 20, 311);
+            addControl(window, L"EDIT", settings.clang.c_str(), WS_TABSTOP | ES_AUTOHSCROLL, 16, 232, 480, 26, 111);
+            addControl(window, L"BUTTON", tr(Text::Browse), WS_TABSTOP, 504, 232, 96, 26, 211);
+            addControl(window, L"BUTTON", tr(Text::Detect), WS_TABSTOP, 608, 232, 100, 26, 212);
+            addControl(window, L"STATIC", tr(Text::TimeoutLabel), 0, 16, 272, 420, 20, 304);
+            addControl(window, L"EDIT", std::to_wstring(settings.timeoutMs).c_str(), WS_TABSTOP | ES_NUMBER, 450, 268, 150, 26, 104);
+            addControl(window, L"STATIC", tr(Text::SqlDialectLabel), 0, 16, 312, 420, 20, 306);
+            addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 450, 308, 258, 300, 106);
             for (const auto& dialect : formatter::sqlDialects)
                 SendDlgItemMessageW(window, 106, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(dialect.label));
             SendDlgItemMessageW(window, 106, CB_SETCURSEL, formatter::sqlDialectIndex(settings.sqlDialect), 0);
-            addControl(window, L"STATIC", tr(Text::ShellDialectLabel), 0, 16, 288, 420, 20, 307);
-            addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 450, 284, 258, 160, 107);
+            addControl(window, L"STATIC", tr(Text::ShellDialectLabel), 0, 16, 352, 420, 20, 307);
+            addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 450, 348, 258, 160, 107);
             for (const auto& dialect : formatter::shellDialects)
                 SendDlgItemMessageW(window, 107, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(dialect.label));
             SendDlgItemMessageW(window, 107, CB_SETCURSEL, formatter::shellDialectIndex(settings.shellDialect), 0);
-            addControl(window, L"STATIC", L"", 0, 16, 324, 692, 44, 105);
+            addControl(window, L"STATIC", tr(Text::ClangStyleLabel), 0, 16, 392, 420, 20, 312);
+            addControl(window, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 450, 388, 258, 160, 112);
+            for (auto style : {L"LLVM", L"Google", L"Microsoft"})
+                SendDlgItemMessageW(window, 112, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(style));
+            SendDlgItemMessageW(window, 112, CB_SETCURSEL, settings.clangStyle == L"Google" ? 1 : settings.clangStyle == L"Microsoft" ? 2 : 0, 0);
+            addControl(window, L"STATIC", L"", 0, 16, 428, 692, 44, 105);
             addControl(window, L"EDIT", L"", WS_TABSTOP | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL,
-                16, 374, 692, 140, 108);
-            addControl(window, L"BUTTON", tr(Text::EnvironmentCheck), WS_TABSTOP, 16, 528, 264, 30, 205);
-            addControl(window, L"BUTTON", tr(Text::Save), WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 528, 100, 30, IDOK);
-            addControl(window, L"BUTTON", tr(Text::Cancel), WS_TABSTOP, 608, 528, 100, 30, IDCANCEL);
+                16, 478, 692, 140, 108);
+            addControl(window, L"BUTTON", tr(Text::EnvironmentCheck), WS_TABSTOP, 16, 632, 264, 30, 205);
+            addControl(window, L"BUTTON", tr(Text::Save), WS_TABSTOP | BS_DEFPUSHBUTTON, 496, 632, 100, 30, IDOK);
+            addControl(window, L"BUTTON", tr(Text::Cancel), WS_TABSTOP, 608, 632, 100, 30, IDCANCEL);
             environmentReport = nullptr;
             setDetectionStatus(window, Text::Empty);
             SendMessageW(host._nppHandle, NPPM_MODELESSDIALOG, MODELESSDIALOGADD, reinterpret_cast<LPARAM>(window));
@@ -341,22 +360,25 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
                 (detectionResult.field == 108 ? Text::EnvironmentChecked : Text::Detected) : Text::DetectionFailed, detectionResult.error);
             detectionControls(window, true);
             if (GetActiveWindow() == window)
-                SetFocus(GetDlgItem(window, detectionResult.field == 108 ? 205 : detectionResult.field == 109 ? 210 : detectionResult.field == 101 ? 203 : 204));
+                SetFocus(GetDlgItem(window, detectionResult.field == 108 ? 205 : detectionResult.field == 111 ? 212 : detectionResult.field == 109 ? 210 : detectionResult.field == 101 ? 203 : 204));
             return 0;
         }
         if (message == WM_COMMAND) {
             int id = LOWORD(w);
-            if ((id == 101 || id == 102 || id == 109) && HIWORD(w) == EN_CHANGE && !environmentReport.is_null()) {
+            if ((((id == 101 || id == 102 || id == 109 || id == 111) && HIWORD(w) == EN_CHANGE) ||
+                 (id == 112 && HIWORD(w) == CBN_SELCHANGE)) && !environmentReport.is_null()) {
                 environmentReport = nullptr;
                 showEnvironmentReport(window);
                 setDetectionStatus(window, Text::EnvironmentInvalidated);
             }
-            if (detectionWorker.joinable() && (id == IDOK || (id >= 201 && id <= 210))) return 0;
-            if (id == 201 || id == 202 || id == 209) { browse(window, id - 100); return 0; }
-            if ((id >= 203 && id <= 205) || id == 210) { startDetection(window, id); return 0; }
+            if (detectionWorker.joinable() && (id == IDOK || (id >= 201 && id <= 212))) return 0;
+            if (id == 201 || id == 202 || id == 209 || id == 211) { browse(window, id - 100); return 0; }
+            if ((id >= 203 && id <= 205) || id == 210 || id == 212) { startDetection(window, id); return 0; }
             if (id == IDOK) {
                 Settings next;
                 next.node = controlText(window, 101); next.prettier = controlText(window, 102); next.ruff = controlText(window, 109);
+                next.clang = controlText(window, 111);
+                next.clangStyle = formatter::clangStyle(controlText(window, 112));
                 std::wstring timeout = controlText(window, 104);
                 size_t end = 0;
                 unsigned long value;
@@ -375,6 +397,8 @@ LRESULT CALLBACK settingsProc(HWND window, UINT message, WPARAM w, LPARAM l) {
                     throw std::runtime_error(utf8(tr(Text::PrettierPathError)));
                 if (!next.ruff.empty() && (!fs::path(next.ruff).is_absolute() || !fs::is_regular_file(next.ruff)))
                     throw std::runtime_error(utf8(tr(Text::RuffPathError)));
+                if (!next.clang.empty() && (!fs::path(next.clang).is_absolute() || !fs::is_regular_file(next.clang)))
+                    throw std::runtime_error(utf8(tr(Text::ClangPathError)));
                 saveSettings(next);
                 DestroyWindow(window); return 0;
             }
@@ -410,7 +434,7 @@ void openSettings() {
     if (settingsWindow) { SetForegroundWindow(settingsWindow); return; }
     settingsWindow = CreateWindowExW(WS_EX_CONTROLPARENT, L"NppFormatterSettings", tr(Text::SettingsTitle),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, 740, 608, host._nppHandle, nullptr, instance, nullptr);
+        CW_USEDEFAULT, CW_USEDEFAULT, 740, 712, host._nppHandle, nullptr, instance, nullptr);
     if (!settingsWindow) return;
     centerOnHost(settingsWindow);
     ShowWindow(settingsWindow, SW_SHOW);
@@ -552,16 +576,23 @@ void formatCurrentDocument(std::string overrideParser = {}, bool promptForParser
             documentParsers[request.bufferId] = {parser, request.document};
             payload["parser"] = parser;
         }
+        if (!payload.contains("parser") && payload.contains("filePath") && formatter::cppFile(filename)) payload["parser"] = "cpp";
+        bool cpp = payload.value("parser", "") == "cpp";
         bool python = payload.value("parser", "") == "python";
-        if (!python && (settings.node.empty() || settings.prettier.empty())) { openSettings(); return; }
+        if (!python && !cpp && (settings.node.empty() || settings.prettier.empty())) { openSettings(); return; }
         request.payload = payload.dump();
         completion.reset(); cancelled = false; finished = false;
         Settings chosen = settings;
         std::wstring bridge = (pluginDirectory / L"bridge.cjs").wstring();
-        worker = std::thread([request = std::move(request), chosen, bridge, python]() mutable {
+        worker = std::thread([request = std::move(request), chosen, bridge, python, cpp]() mutable {
             auto result = std::make_unique<Completion>(); result->request = std::move(request);
             try {
-                if (python) {
+                if (cpp) {
+                    const auto payload = json::parse(result->request.payload);
+                    result->response = formatter::formatCpp(chosen.clang, result->request.text,
+                        wide(payload.value("filePath", "")), payload.at("cursorOffset").get<size_t>(),
+                        chosen.clangStyle, chosen.timeoutMs, cancelled);
+                } else if (python) {
                     const auto payload = json::parse(result->request.payload);
                     result->response = formatter::formatPython(chosen.ruff, result->request.text,
                         wide(payload.value("filePath", "")), payload.at("cursorOffset").get<size_t>(),
@@ -594,6 +625,8 @@ void applyCompletion() {
     if (!result->error.empty()) throw std::runtime_error(result->error);
     bool retry = false;
     if (!result->response.value("ok", false)) {
+        if (result->response.value("code", "") == "MISSING_CLANG_FORMAT")
+            throw std::runtime_error(utf8(tr(Text::ClangMissing)));
         if (result->response.value("code", "") == "MISSING_RUFF")
             throw std::runtime_error(utf8(tr(Text::RuffMissing)));
         if (result->response.contains("code") && result->response.at("code") == "MISSING_JAVA_PLUGIN")

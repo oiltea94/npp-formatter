@@ -4,6 +4,26 @@
 
 No pending changes. / 暂无待发布改动。
 
+## 0.4.0
+
+### English
+
+#### Added
+
+- Format C/C++ with user-installed clang-format, independently of Node.js, Prettier and Ruff. Support saved source/header extensions, Notepad++ C/C++ languages and an explicit language picker choice.
+- Add executable browsing, validated auto-detection, independent environment checks, and LLVM/Google/Microsoft fallback styles in English, Simplified Chinese and Traditional Chinese.
+- Honor project `.clang-format` settings for saved files; isolate untitled buffers from the working directory. Preserve native Unicode cursor mapping, one-step undo, stale-result protection and source files on disk.
+- Exercise real clang-format in native adapter and editor tests for the x86, x64 and ARM64 plugin matrix. CI uses x64 clang-format; the ARM64 runner executes that external tool through Windows emulation.
+
+### 中文
+
+#### 新增
+
+- 通过用户自行安装的 clang-format 格式化 C/C++，不依赖 Node.js、Prettier 或 Ruff。支持已保存源文件／头文件扩展名、Notepad++ C/C++ 语言和语言选择器。
+- 增加可执行文件浏览、验证式自动检测、独立环境检查和 LLVM／Google／Microsoft 默认风格，覆盖英文、简体中文、繁体中文。
+- 已保存文件遵循项目 `.clang-format`，未保存文档隔离工作目录配置。保留原生 Unicode 光标映射、一步撤销、过期结果保护和磁盘源文件。
+- x86、x64、ARM64 插件矩阵增加真实 clang-format 的适配器和编辑器测试。CI 使用 x64 clang-format，ARM64 runner 通过 Windows 模拟运行该外部工具。
+
 ## 0.3.0
 
 ### English

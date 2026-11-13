@@ -296,7 +296,7 @@ def run(sandbox, architecture, language='en'):
             y = max(work.top, min(y, max(work.top, work.bottom - height)))
             assert abs(bounds.left - x) <= 1 and abs(bounds.top - y) <= 1, 'Settings is not centered on its owner'
             previous = None
-            for identifier in (101, 102, 109, 104, 106, 107, 105, 108, 205):
+            for identifier in (101, 102, 109, 111, 104, 106, 107, 112, 105, 108, 205):
                 rect = W.RECT()
                 assert USER32.GetWindowRect(get_control(dialog, identifier), C.byref(rect))
                 if previous is not None:
@@ -317,14 +317,15 @@ def run(sandbox, architecture, language='en'):
         title = C.create_unicode_buffer(256)
         send(dialog, 13, len(title), C.addressof(title))
         assert title.value == labels['title'], title.value
-        for identifier, key in ((201, 'browse'), (202, 'browse'), (209, 'browse'), (203, 'detect'), (204, 'detect'), (210, 'detect'), (1, 'save'), (2, 'cancel')):
+        for identifier, key in ((201, 'browse'), (202, 'browse'), (209, 'browse'), (203, 'detect'), (204, 'detect'), (210, 'detect'), (211, 'browse'), (212, 'detect'), (1, 'save'), (2, 'cancel')):
             assert control_text(dialog, identifier) == labels[key]
         assert not get_control(dialog, 103), 'Global untitled parser setting should be removed'
         assert control_text(dialog, 106) == 'SQL', 'Old settings must default to standard SQL'
+        assert control_text(dialog, 112) == 'LLVM', 'Old settings must default to LLVM'
         assert control_text(dialog, 107) == 'Bash', 'Old settings must default to Bash'
         send(get_control(dialog, 107), 0x14E, 1, 0)
         send(get_control(dialog, 106), 0x14E, 1, 0)  # MySQL, not saved until Save.
-        for identifier in (301, 302, 304, 306, 307, 309):
+        for identifier in (301, 302, 304, 306, 307, 309, 311, 312):
             label = control_text(dialog, identifier)
             assert label
             if language != 'en':
@@ -338,7 +339,7 @@ def run(sandbox, architecture, language='en'):
         USER32.PostMessageW(error_dialog, 0x10, 0, 0)
         until(lambda: not USER32.IsWindow(error_dialog))
         set_control(dialog, 104, '10000')
-        for browse_id, detect_id in ((201, 203), (202, 204), (209, 210)):
+        for browse_id, detect_id in ((201, 203), (202, 204), (209, 210), (211, 212)):
             browse_rect, detect_rect = W.RECT(), W.RECT()
             assert get_control(dialog, detect_id), 'Auto-detect button is missing'
             USER32.GetWindowRect(get_control(dialog, browse_id), C.byref(browse_rect))
@@ -438,6 +439,8 @@ def run(sandbox, architecture, language='en'):
             set_control(dialog, 101, '')
             set_control(dialog, 102, 'unsaved path')
             set_control(dialog, 109, 'unsaved Ruff path')
+            set_control(dialog, 111, 'unsaved clang-format path')
+            send(get_control(dialog, 112), 0x14E, 1, 0)
             set_control(dialog, 104, '15000')
             USER32.PostMessageW(dialog, 0x111, 204, 0)
             until(lambda: labels['node_first'] in control_text(dialog, 105))
@@ -483,6 +486,9 @@ def run(sandbox, architecture, language='en'):
                     assert {'en': 'Check failed', 'zh-TW': '檢查失敗'}[target] in control_text(dialog, 108)
                 assert control_text(dialog, 102) == 'unsaved path'
                 assert control_text(dialog, 109) == 'unsaved Ruff path'
+                assert control_text(dialog, 111) == 'unsaved clang-format path'
+                assert control_text(dialog, 112) == 'Google'
+                assert control_text(dialog, 212) == translated['detect']
                 assert control_text(dialog, 210) == translated['detect']
                 assert control_text(dialog, 104) == '15000'
                 assert control_text(dialog, 106) == 'SQL Server (T-SQL)'
@@ -520,6 +526,7 @@ def run(sandbox, architecture, language='en'):
             assert automation.text(about_dialog) == about_text, 'Repeated UIA reads changed About text'
         print(f'PASS native UI Automation: {architecture} helper, repeated About reads', flush=True)
         assert labels['about_body'] in about_text, about_text
+        assert 'C/C++' in about_text and 'clang-format' in about_text
         assert 'Python' in about_text and 'Ruff' in about_text and '.pyi' in about_text
         assert 'prettier-plugin-java' in about_text, 'About must explain the optional Java dependency'
         assert '@prettier/plugin-xml' in about_text, 'About must explain the optional XML dependency'
@@ -655,7 +662,7 @@ def run(sandbox, architecture, language='en'):
         format_to('const answer = 42;\n')
         new_document('const answer:number=42;', 85)  # L_TYPESCRIPT
         format_to('const answer: number = 42;\n')
-        new_document('{"a":1}', 2)  # Unsupported L_C must not be silently treated as JSON.
+        new_document('{"a":1}', 23)  # Unsupported L_LUA must not be silently treated as JSON.
         picker = open_picker()
         USER32.PostMessageW(picker, 0x111, 2, 0)
         until(lambda: not USER32.IsWindow(picker))
@@ -1104,7 +1111,97 @@ def run(sandbox, architecture, language='en'):
         choose(open_picker(format_as_command), 'Python (Ruff)')
         until(lambda: text(editor) == 'x = 3\n')
         print('PASS Python routing: project config, isolated untitled, host language, picker memory and explicit override', flush=True)
-        report = {'architecture': architecture, 'language': language, 'checks': 32,
+        cpp_source = '// 中文😀\nint main(){return 42;}\n'
+        cpp_expected = '// 中文😀\nint main() { return 42; }\n'
+        new_document(cpp_source, 3)  # L_CPP
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        missing = until(lambda: next((w for w in windows(process.pid)
+                                     if window_class(w) == '#32770' and window_title(w) == SETTING_ERRORS[language][0]), None))
+        guidance = {'en': 'C/C++ formatting requires clang-format.', 'zh-CN': 'C/C++ 格式化需要 clang-format。', 'zh-TW': 'C/C++ 格式化需要 clang-format。'}[language]
+        assert guidance in automation.text(missing)
+        assert text(editor) == cpp_source
+        USER32.PostMessageW(missing, 0x10, 0, 0)
+        until(lambda: not USER32.IsWindow(missing))
+        print('PASS C/C++: localized missing clang-format preserves source', flush=True)
+
+        clang_exe = Path(os.environ.get('CLANG_FORMAT_EXE') or ROOT / '.tools/llvm-mingw-20261104-ucrt-x86_64/bin/clang-format.exe')
+        before = ini_path.read_bytes()
+        dialog = open_settings()
+        set_control(dialog, 111, node)
+        invalid = check_environment(dialog)
+        assert 'did not report a clang-format version' in invalid
+        set_control(dialog, 111, str(clang_exe))
+        detect(dialog, 212)
+        assert os.path.samefile(control_text(dialog, 111), clang_exe)
+        report_text = check_environment(dialog)
+        assert f'clang-format (C/C++): {available}' in report_text
+        send(get_control(dialog, 112), 0x14E, 1, 0)
+        USER32.PostMessageW(dialog, 0x111, (1 << 16) | 112, get_control(dialog, 112))
+        until(lambda: control_text(dialog, 108) == '')
+        assert ini_path.read_bytes() == before
+        USER32.PostMessageW(dialog, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        dialog = open_settings()
+        assert control_text(dialog, 111) == '' and control_text(dialog, 112) == 'LLVM'
+        set_control(dialog, 111, str(clang_exe))
+        USER32.PostMessageW(dialog, 0x111, 1, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        saved.read(ini_path, encoding='utf-16')
+        assert saved['Formatter']['NodePath'] == '' and saved['Formatter']['PrettierPath'] == ''
+        assert os.path.samefile(saved['Formatter']['ClangFormatPath'], clang_exe)
+        assert saved['Formatter']['ClangFormatStyle'] == 'LLVM'
+        print('PASS C/C++ settings: detection, invalid tool, independent probe, stale report, Cancel and Save', flush=True)
+
+        send(editor, 2175, 0, 0)  # SCI_EMPTYUNDOBUFFER
+        send(editor, 2025, cpp_source.encode('utf-8').index(b'42'), 0)
+        format_to(cpp_expected)
+        assert send(editor, 2008, 0, 0) == cpp_expected.encode('utf-8').index(b'42')
+        send(editor, 2176, 0, 0)
+        assert text(editor) == cpp_source
+        format_to(cpp_expected)
+        send(editor, 2175, 0, 0)
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        until(lambda: labels['unchanged'] in status())
+        assert not send(editor, 2174, 0, 0)
+        set_text('int main( {\n')
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        error_dialog = wait_parse_error()
+        automation.invoke(error_dialog, PARSE_ERRORS[language][1])
+        until(lambda: 'clang-format: incomplete formatting at line 1' in automation.text(error_dialog))
+        assert text(editor) == 'int main( {\n'
+        USER32.PostMessageW(error_dialog, 0x10, 0, 0)
+        until(lambda: not USER32.IsWindow(error_dialog))
+        print('PASS C/C++ editor: native Unicode caret, one undo, no-op and incomplete-format preservation', flush=True)
+
+        set_text('int main(){return 42;}\n')
+        cpp_file = sandbox / 'cpp sample.CPP'
+        raw = str(cpp_file).encode('utf-16-le') + b'\0\0'
+        assert KERNEL32.WriteProcessMemory(handle, memory, C.c_char_p(raw), len(raw), None)
+        assert send(main_window, 2024 + 78, 0, memory)
+        disk_before = cpp_file.read_bytes()
+        (sandbox / '.clang-format').write_text('BasedOnStyle: LLVM\nIndentWidth: 6\nAllowShortFunctionsOnASingleLine: None\n', encoding='utf-8')
+        send(main_window, 2024 + 6, 0, 58)  # Saved extension takes precedence over highlighting.
+        format_to('int main() {\n      return 42;\n}\n')
+        assert cpp_file.read_bytes() == disk_before
+        new_document('int x=1;\n', 2)  # L_C
+        format_to('int x = 1;\n')
+        new_document('int x=2;\n')
+        choose(open_picker(), 'C / C++ (clang-format)')
+        until(lambda: text(editor) == 'int x = 2;\n')
+        replace_part('2', '3')
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        until(lambda: labels['unchanged'] in status())
+        new_document('int x=4;\n', 58)
+        choose(open_picker(format_as_command), 'C / C++ (clang-format)')
+        until(lambda: text(editor) == 'int x = 4;\n')
+        dialog = open_settings()
+        send(get_control(dialog, 112), 0x14E, 2, 0)  # Microsoft
+        USER32.PostMessageW(dialog, 0x111, 1, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        new_document('int main(){return 42;}\n', 3)
+        format_to('int main()\n{\n    return 42;\n}\n')
+        print('PASS C/C++ routing: saved extensions, project precedence, C host language, picker and Microsoft fallback', flush=True)
+        report = {'architecture': architecture, 'language': language, 'checks': 36,
                   'live_language_switch': language == 'en', 'result': 'PASS'}
         (ROOT / 'build' / architecture / f'editor-smoke-{language}.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     finally:

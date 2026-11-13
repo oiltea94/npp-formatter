@@ -3,7 +3,7 @@
 <h1 align="center">NppFormatter</h1>
 
 <p align="center"><strong>Your editor. Your tools. Your formatting rules.</strong></p>
-<p align="center">Format code inside Notepad++ with Prettier and Ruff, project-aware settings, and one-step undo.</p>
+<p align="center">Format code inside Notepad++ with Prettier, Ruff and clang-format, project-aware settings, and one-step undo.</p>
 
 <p align="center">
   <a href="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml"><img src="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml/badge.svg?branch=main" alt="Windows build and release checks"></a>
@@ -26,9 +26,11 @@
   <img src="https://raw.githubusercontent.com/oiltea94/npp-formatter/main/docs/assets/formatting-preview.svg" width="1040" alt="JavaScript example: a compact sum function becomes consistently spaced and indented after formatting with Prettier.">
 </p>
 
-Inspired by [Formatter for Sublime Text](https://packages.sublimetext.com/packages/Formatter), NppFormatter is building toward a configurable home for formatting and text transformation tools in Notepad++. **Prettier and Ruff are available now.**
+Inspired by [Formatter for Sublime Text](https://packages.sublimetext.com/packages/Formatter), NppFormatter is building toward a configurable home for formatting and text transformation tools in Notepad++. **The development branch integrates Prettier, Ruff and clang-format.**
 
-> **Current scope:** version 0.3.0 formats whole documents with Prettier or Ruff: 16 built-in Prettier choices, 7 optional Prettier languages, and Python through Ruff, with environment checks for both tools. You install the external tools yourself; the plugin neither bundles nor installs Node.js, Prettier, Ruff, or language packages. More adapters and text transformations are on the [roadmap](#roadmap).
+> **Development status:** C/C++ support is new in the unreleased 0.4.0 source. The published 0.3.0 packages listed below include Prettier and Ruff. Build from source to try clang-format before the next release.
+
+> **Current scope:** the 0.4.0 development version formats whole documents with Prettier, Ruff or clang-format: 16 built-in Prettier choices, 7 optional Prettier languages, Python through Ruff, and C/C++ through clang-format, with independent environment checks. You install the external tools yourself; the plugin neither bundles nor installs Node.js, Prettier, Ruff, clang-format, or language packages. More adapters and text transformations are on the [roadmap](#roadmap).
 
 ## Why NppFormatter?
 
@@ -37,7 +39,7 @@ Inspired by [Formatter for Sublime Text](https://packages.sublimetext.com/packag
 | Consistent formatting across a project | Reads Prettier configuration, EditorConfig, and the nearest `.prettierignore` for saved files |
 | A quick cleanup without leaving the editor | Formats the current buffer, including unsaved edits, and maps the caret into the result |
 | An easy way back | Applies changes in one undo step; unchanged output adds no undo entry |
-| Control over your tools | Uses your chosen Node.js, Prettier and Ruff installations, with separate Auto-detect buttons |
+| Control over your tools | Uses your chosen Node.js, Prettier, Ruff and clang-format installations, with separate Auto-detect buttons |
 | Help with pasted or mixed-language content | Offers document language selection, a one-time override, and explicit recovery after parser errors |
 | A responsive editor | Runs formatting in the background and discards results when the document or editing state changes |
 
@@ -132,7 +134,7 @@ Select the Prettier directory containing `package.json`, rather than its `bin` d
 
 ## Languages
 
-The language picker offers **16 built-in Prettier choices, 7 optional Prettier languages (Java, XML, PHP, SQL, Properties, TOML, Shell / Bash), and Python (Ruff)**. Built-in formats need only Prettier; the seven optional Prettier languages need their respective packages, while Python needs Ruff. Actual syntax support depends on your installed formatter versions.
+The language picker offers **16 built-in Prettier choices, 7 optional Prettier languages (Java, XML, PHP, SQL, Properties, TOML, Shell / Bash), Python (Ruff), and C / C++ (clang-format)**. Built-in formats need only Prettier; the seven optional Prettier languages need their respective packages, while Python needs Ruff and C/C++ needs clang-format. Actual syntax support depends on your installed formatter versions.
 
 | Language / picker choice | Common saved-file extensions |
 |---|---|
@@ -162,7 +164,7 @@ The language picker offers **16 built-in Prettier choices, 7 optional Prettier l
 
 **Additional saved-file formats:** Flow (`.js.flow`), MJML (`.mjml`), PostCSS (`.pcss`, `.postcss`), and JSON.stringify-style JSON (`.importmap`). Prettier infers these from the path; they have no dedicated picker entries. Project configuration can also select a built-in parser such as `lwc`. The extensions above are examples, not an exhaustive list.
 
-**Untitled documents:** automatic Notepad++ language mapping covers JavaScript, TypeScript, Java, XML, PHP, SQL, Properties, TOML, Shell, Python, JSON, JSON5, HTML, CSS, and YAML. Use **Format with language...** for other picker choices. MDX and Handlebars are distinct formats; selecting Markdown or HTML is not equivalent. Python is available through Ruff. C/C++ formatting remains planned.
+**Untitled documents:** automatic Notepad++ language mapping covers JavaScript, TypeScript, Java, XML, PHP, SQL, Properties, TOML, Shell, Python, C/C++, JSON, JSON5, HTML, CSS, and YAML. Use **Format with language...** for other picker choices. MDX and Handlebars are distinct formats; selecting Markdown or HTML is not equivalent. Python uses Ruff; C/C++ uses clang-format.
 
 ### Optional Java support
 
@@ -259,6 +261,18 @@ Open **Settings → Check formatting environment** to inspect the currently ente
 
 The check runs in the background, can be cancelled by closing Settings, and neither installs packages nor saves settings. Changing either path clears the previous report. For project dependencies, activate a saved document in that project and rerun the check. External diagnostics retain their original language.
 
+### C/C++ with clang-format
+
+C/C++ uses a **user-installed `clang-format.exe`**, supplied by LLVM or an existing development toolchain. It runs independently of Node.js, Prettier and Ruff. In **Settings**, browse to the executable or use **Auto-detect**, then **Save**. Detection validates the current field, `PATH`, and standard LLVM installation directories with `--version`; it never installs a tool. Browse directly if your toolchain is installed elsewhere.
+
+Supported files: **`.c`, `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp`, `.hh`, `.hxx`**, including uppercase extensions. Untitled documents follow Notepad++'s **C** or **C++** language; **C / C++ (clang-format)** is also available in the language picker. A saved extension takes precedence over highlighting, while an explicit language choice applies only to that operation.
+
+Saved files use clang-format's `.clang-format` / `_clang-format` discovery from their directory. Project configuration takes priority over the **C/C++ style** setting. Without a project configuration, choose **LLVM** (default), **Google**, or **Microsoft**. Untitled buffers use that preset directly and do not inherit configuration from Notepad++'s working directory. Line endings follow clang-format's input detection and project rules.
+
+The buffer is sent through stdin; the source file is never written or compiled. Native `--cursor` results retain the caret across Unicode text. Changes support one-step undo and stale-result protection. Tool errors and incomplete formatting preserve the original buffer; clang-format is a formatter, not a complete C/C++ syntax checker. Project settings can reorder includes or disable formatting.
+
+**Check formatting environment** checks the executable version and formats a C++ sample using the selected fallback and current document directory. Disabled or unchanged samples are reported as unverified. Other formatting tools may be absent. CI uses the hash-verified LLVM-MinGW toolchain's clang-format 23.1.5; its x64 executable runs natively on x64 Windows and through Windows emulation on the ARM64 runner. This does not establish native ARM64 clang-format or 32-bit Windows coverage.
+
 ### Python with Ruff
 
 Python uses **Ruff**, an independent executable. It needs neither Node.js nor Prettier and does not use an npm plugin. Install Ruff yourself; for example, with an existing Python installation:
@@ -283,7 +297,7 @@ Formatting sends the buffer through stdin and never writes the source file or ex
 |---|---|
 | **Format document** | Formats the entire current buffer, including unsaved changes |
 | **Format with language...** | Overrides the language for this operation, keeping the file type, remembered choice, project options, and ignore rules |
-| **Settings...** | Configures Node.js, Prettier, Ruff, SQL/Shell dialects and timeout; checks installed formatting tools |
+| **Settings...** | Configures Node.js, Prettier, Ruff, clang-format, SQL/Shell dialects, C/C++ fallback style and timeout; checks installed formatting tools |
 | **About** | Shows the version, supported formats, runtime requirements, and clickable project homepage |
 
 **Saved files** use their path for parser inference and project configuration. **Untitled files** use a supported Notepad++ document language; plain text containing valid JSON is detected automatically. Otherwise, a picker appears and remembers your choice for that document during the current session.
@@ -335,7 +349,7 @@ Settings live in `NppFormatter.ini` in the plugin configuration directory suppli
 | Symptom | Next step |
 |---|---|
 | Plugin menu is missing | Match the DLL to Notepad++'s architecture, check the plugin folder, and restart |
-| Formatting opens Settings | Configure Node.js and Prettier for Prettier languages; Python uses its separate Ruff path |
+| Formatting opens Settings | Configure Node.js and Prettier for Prettier languages; Python and C/C++ use their separate executable paths |
 | Python requires Ruff | Install Ruff, then select or auto-detect its executable in Settings |
 | Node.js or Prettier fails to load | Re-run Auto-detect; select the real `node.exe` and the Prettier package containing `package.json` |
 | Pasted code uses the wrong language | Use **Format with language...**; whole-text replacement resets remembered choices |
@@ -350,7 +364,7 @@ Settings live in `NppFormatter.ini` in the plugin configuration directory suppli
 | UTF-8 is required | Choose **Encoding → Convert to UTF-8** and retry |
 | Buffer or selection is rejected | Stay within 8 MiB and use one ordinary caret or selection |
 
-Still stuck? [Open an issue](https://github.com/oiltea94/npp-formatter/issues/new) with the plugin, editor, Node.js, Prettier, and Ruff versions; a minimal sample; relevant configuration; and the complete error or status message.
+Still stuck? [Open an issue](https://github.com/oiltea94/npp-formatter/issues/new) with the plugin, editor, Node.js, Prettier, Ruff, and clang-format versions; a minimal sample; relevant configuration; and the complete error or status message.
 
 ## Development
 
@@ -363,6 +377,7 @@ npm ci
 python scripts/bootstrap.py
 python tests/download_ruff.py --arch x64
 $env:RUFF_EXE = (Resolve-Path build/x64/ruff/ruff.exe).Path
+$env:CLANG_FORMAT_EXE = (Resolve-Path .tools/llvm-mingw-20261104-ucrt-x86_64/bin/clang-format.exe).Path
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architecture all
 ```
 
@@ -383,7 +398,7 @@ The bootstrap downloads SHA-256-pinned **LLVM-MinGW 20261104 / UCRT**. The compi
 
 Editor tests cover English, Simplified Chinese, and Traditional Chinese, including live language changes. They use an isolated editor copy, verify its architecture, and leave the active installation alone. Use `--language en`, `zh-CN`, or `zh-TW` for a single locale, and 64-bit Python for x64/ARM64 editors. CI runs matching native process and editor tests on `windows-latest` and `windows-11-arm`.
 
-The native plugin and process management live in `src/`, the Prettier adapter in `bridge/`, and tests in `tests/`. The prototype starts a Node.js process for Prettier or a Ruff process for Python per request and allows one active request at a time. The [product specification](https://github.com/oiltea94/npp-formatter/blob/main/docs/SPEC.md) records the current scope and intended architecture.
+The native plugin and process management live in `src/`, the Prettier adapter in `bridge/`, and tests in `tests/`. The prototype starts a Node.js process for Prettier, a Ruff process for Python, or clang-format process for C/C++ per request and allows one active request at a time. The [product specification](https://github.com/oiltea94/npp-formatter/blob/main/docs/SPEC.md) records the current scope and intended architecture.
 
 </details>
 
@@ -414,7 +429,6 @@ These are planned capabilities, not current menu commands:
 | Next area | Intended result |
 |---|---|
 | Generic tool definitions | Register command-line tools through configuration |
-| More adapters | C/C++ with clang-format; Python with Ruff |
 | Tool selection | Per-language defaults, project overrides, and dependency diagnostics |
 | Editing workflows | Selection formatting and format on save |
 | Text transformations | Minifiers, converters, and ordered tool pipelines with one final undoable edit |

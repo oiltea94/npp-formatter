@@ -23,7 +23,8 @@ int wmain(int argc, wchar_t** argv) {
         for (auto [language, parser] : {std::pair{L_JAVASCRIPT, "babel"}, {L_JS_EMBEDDED, "babel"},
              {L_TYPESCRIPT, "typescript"}, {L_JAVA, "java"}, {L_JSON, "json"}, {L_JSON5, "json5"},
              {L_HTML, "html"}, {L_XML, "xml"}, {L_CSS, "css"}, {L_YAML, "yaml"},
-             {L_PHP, "php"}, {L_SQL, "sql"}, {L_PROPS, "dot-properties"}, {L_TOML, "toml"}, {L_BASH, "sh"}, {L_PYTHON, "python"}})
+             {L_PHP, "php"}, {L_SQL, "sql"}, {L_PROPS, "dot-properties"}, {L_TOML, "toml"}, {L_BASH, "sh"}, {L_PYTHON, "python"},
+             {L_C, "cpp"}, {L_CPP, "cpp"}})
             check(std::string(formatter::parserForLanguage(language)) == parser, "Host parser mapping failed");
         for (int language : {L_TEXT, L_USER, L_EXTERNAL})
             check(formatter::parserForLanguage(language) == nullptr, "Unsupported language was guessed");

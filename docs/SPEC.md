@@ -8,7 +8,7 @@ inspired by Formatter for Sublime Text. Multiple external tools, configuration-b
 extension, and language-specific workflows are the target; Prettier is the first
 adapter. External formatters and their runtimes are installed by the user.
 
-This document distinguishes the implemented 0.3.0 Prettier and Ruff integration from planned
+This document distinguishes the implemented 0.4.0 development integration of Prettier, Ruff and clang-format from planned
 capabilities. The target architecture below is a plan, not current functionality.
 
 ## Target architecture (planned)
@@ -49,10 +49,10 @@ editor mutations. These criteria remain unverified until their stages are built.
 ## Current prototype scope
 
 The implemented prototype is a lightweight C++ DLL with a Prettier-specific
-JavaScript bridge and a native Ruff adapter for Python. The shared process runner
+JavaScript bridge, a native Ruff adapter for Python and a clang-format adapter for C/C++. The shared process runner
 accepts an executable, argument vector, working directory and stdin. Prettier needs
 user-installed Node.js and Prettier; Python needs only a user-installed Ruff executable.
-None is included in the ZIP. Configurable tool definitions, selection formatting
+C/C++ needs only a user-installed clang-format executable. None is included in the ZIP. Configurable tool definitions, selection formatting
 and pipelines remain planned.
 
 Implemented slices:
@@ -119,7 +119,17 @@ Implemented slices:
     caret positions and use a clamped UTF-16 line/column fallback within changes.
     Ruff 0.17.5 is the tested version; x86 editor tests use x64 Ruff on x64 Windows,
     and ARM64 CI uses ARM64 Ruff. Native 32-bit Windows is outside this adapter's
-    verified scope. Svelte/Astro/Pug are deferred; C/C++ is the next language priority.
+    verified scope. Svelte/Astro/Pug are deferred in favor of common languages and editing workflows.
+
+12. C/C++ support: call clang-format directly, route C/C++ source/header extensions
+    and host languages, and offer an explicit picker choice. Persist ClangFormatPath
+    and ClangFormatStyle (LLVM/Google/Microsoft). Validate detected executables and
+    independently probe formatting using unsaved settings. Follow project configuration
+    for saved files; use an isolated preset for untitled buffers. Convert the native
+    UTF-8 cursor result to the shared UTF-16 protocol. Fail without applying partial
+    output on incomplete formatting. Send stdin only, never write source files.
+    CI uses the verified toolchain's x64 clang-format 23.1.5; on ARM64 Windows that
+    external process runs under emulation. Native ARM64 clang-format remains untested.
 
 The supported build targets are Notepad++ x86, x64, and ARM64 with UTF-8 Scintilla buffers. Existing non-UTF-8
 buffers receive a clear message asking the user to convert the encoding first.

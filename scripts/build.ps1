@@ -43,6 +43,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "$arch process test build failed." }
         & $compiler @flags -municode 'tests/ruff_test.cpp' -o "$build/ruff_test.exe"
         if ($LASTEXITCODE -ne 0) { throw "$arch Ruff test build failed." }
+        & $compiler @flags -municode 'tests/clang_format_test.cpp' -o "$build/clang_format_test.exe"
+        if ($LASTEXITCODE -ne 0) { throw "$arch clang-format test build failed." }
         & $compiler @flags -municode 'tests/ui_automation.cpp' -o "$build/ui_automation.exe" -lole32 -loleaut32 -luuid
         if ($LASTEXITCODE -ne 0) { throw "$arch UI Automation helper build failed." }
         $canRun = ($arch -eq 'x86') -or ($arch -eq 'x64' -and $hostArchitecture -eq 'AMD64') -or ($arch -eq 'arm64' -and $hostArchitecture -eq 'ARM64')
@@ -54,6 +56,10 @@ try {
             if (-not $ruffPath) { $ruffPath = (Get-Command ruff -ErrorAction Stop).Source }
             & "./$build/ruff_test.exe" $ruffPath
             if ($LASTEXITCODE -ne 0) { throw "$arch Ruff integration tests failed." }
+            $clangFormatPath = $env:CLANG_FORMAT_EXE
+            if (-not $clangFormatPath) { $clangFormatPath = Join-Path $Toolchain 'bin/clang-format.exe' }
+            & "./$build/clang_format_test.exe" $clangFormatPath
+            if ($LASTEXITCODE -ne 0) { throw "$arch clang-format integration tests failed." }
         } else {
             Write-Host "SKIP $arch runtime tests (host=$hostArchitecture, SkipTests=$SkipTests); static package verification still runs."
         }

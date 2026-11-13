@@ -3,7 +3,7 @@
 <h1 align="center">NppFormatter</h1>
 
 <p align="center"><strong>熟悉的编辑器，你的工具，你的格式化规则。</strong></p>
-<p align="center">在 Notepad++ 中使用 Prettier 和 Ruff 格式化代码，遵循项目配置，支持一步撤销。</p>
+<p align="center">在 Notepad++ 中使用 Prettier、Ruff 和 clang-format 格式化代码，遵循项目配置，支持一步撤销。</p>
 
 <p align="center">
   <a href="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml"><img src="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml/badge.svg?branch=main" alt="Windows 构建与发布检查"></a>
@@ -26,9 +26,11 @@
   <img src="https://raw.githubusercontent.com/oiltea94/npp-formatter/main/docs/assets/formatting-preview.svg" width="1040" alt="JavaScript 格式化示例：紧凑的 sum 函数经过 Prettier 格式化后，具有一致的空格、换行和缩进。">
 </p>
 
-灵感来自 [Sublime Text 的 Formatter](https://packages.sublimetext.com/packages/Formatter)。NppFormatter 希望将多种格式化与文本转换工具接入 Notepad++，通过统一配置使用。**目前已接入 Prettier 和 Ruff。**
+灵感来自 [Sublime Text 的 Formatter](https://packages.sublimetext.com/packages/Formatter)。NppFormatter 希望将多种格式化与文本转换工具接入 Notepad++，通过统一配置使用。**开发分支已接入 Prettier、Ruff 和 clang-format。**
 
-> **当前范围：** 0.3.0 支持使用 Prettier 或 Ruff 格式化全文，提供 16 个 Prettier 内置语言选项、7 种 Prettier 可选语言、Ruff Python 支持，以及两类工具的环境检查。外部工具由用户自行安装；插件不捆绑或安装 Node.js、Prettier、Ruff 和语言扩展包。更多适配器与文本转换功能见[路线图](#roadmap)。
+> **开发状态：** C/C++ 支持属于尚未发布的 0.4.0 源码。下方已发布的 0.3.0 安装包包含 Prettier 和 Ruff；下个版本发布前，可从源码构建体验 clang-format。
+
+> **当前范围：** 0.4.0 开发版支持使用 Prettier、Ruff 或 clang-format 格式化全文，提供 16 个 Prettier 内置语言选项、7 种 Prettier 可选语言、Ruff Python 和 clang-format C/C++ 支持，以及各工具的独立环境检查。外部工具由用户自行安装；插件不捆绑或安装 Node.js、Prettier、Ruff、clang-format 和语言扩展包。更多适配器与文本转换功能见[路线图](#roadmap)。
 
 ## 为什么使用 NppFormatter？
 
@@ -37,7 +39,7 @@
 | 同一项目保持一致的代码风格 | 为已保存文件读取 Prettier 配置、EditorConfig 和最近的 `.prettierignore` |
 | 在编辑器里快速整理代码 | 格式化当前缓冲区，包含未保存的修改，并将光标映射到结果中 |
 | 随时恢复格式化前的内容 | 一步撤销整次修改；输出未变化时，不增加撤销记录 |
-| 自己选择工具安装 | 使用指定的 Node.js、Prettier 和 Ruff，分别提供自动检测按钮 |
+| 自己选择工具安装 | 使用指定的 Node.js、Prettier、Ruff 和 clang-format，分别提供自动检测按钮 |
 | 处理粘贴内容或切换代码语言 | 提供文档语言选择、仅本次生效的覆盖，以及解析失败后的显式重试 |
 | 格式化时编辑器保持响应 | 后台执行，文档或编辑状态变化后丢弃过期结果 |
 
@@ -136,7 +138,7 @@ node -p "require('path').dirname(require.resolve('prettier/package.json'))"
 
 ## 支持的语言
 
-语言选择器提供 **16 个 Prettier 内置选项、Java、XML、PHP、SQL、Properties、TOML、Shell / Bash 这 7 种可选 Prettier 语言，以及 Python (Ruff)**。内置格式只需 Prettier；七种可选 Prettier 语言各需对应扩展包，Python 则需 Ruff。具体语法支持取决于安装的格式化工具版本。
+语言选择器提供 **16 个 Prettier 内置选项、Java、XML、PHP、SQL、Properties、TOML、Shell / Bash 这 7 种可选 Prettier 语言，以及 Python (Ruff) 和 C / C++ (clang-format)**。内置格式只需 Prettier；七种可选 Prettier 语言各需对应扩展包，Python 则需 Ruff，C/C++ 需 clang-format。具体语法支持取决于安装的格式化工具版本。
 
 | 语言 / 选择器选项 | 常见已保存文件扩展名 |
 |---|---|
@@ -166,7 +168,7 @@ node -p "require('path').dirname(require.resolve('prettier/package.json'))"
 
 **已保存文件还支持：** Flow（`.js.flow`）、MJML（`.mjml`）、PostCSS（`.pcss`、`.postcss`）和 JSON.stringify 风格的 JSON（`.importmap`）。这些格式由 Prettier 根据路径推断，选择器中暂未提供独立选项。项目配置也可显式指定 `lwc` 等内置解析器。上表仅列出常见扩展名。
 
-**未保存文档：** 自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、Java、XML、PHP、SQL、Properties、TOML、Shell、Python、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可通过**按指定语言格式化...** 使用。MDX 和 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。Python 已通过 Ruff 接入，C/C++ 格式化仍在规划中。
+**未保存文档：** 自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、Java、XML、PHP、SQL、Properties、TOML、Shell、Python、C/C++、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可通过**按指定语言格式化...** 使用。MDX 和 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。Python 使用 Ruff，C/C++ 使用 clang-format。
 
 ### 可选的 Java 支持
 
@@ -265,6 +267,18 @@ npm install --global prettier-plugin-sh@0.20.2
 
 <a id="usage"></a>
 
+### 使用 clang-format 格式化 C/C++
+
+C/C++ 使用**用户自行安装的 `clang-format.exe`**，可来自 LLVM 或已有开发工具链，无需 Node.js、Prettier 或 Ruff。打开**配置**，浏览选择可执行文件或点击**自动检测**，然后**保存**。检测依次验证当前输入、`PATH` 和 LLVM 常规安装目录，并调用 `--version` 验证；不会安装工具。其他位置的工具链可直接浏览选择。
+
+支持 **`.c`、`.cpp`、`.cc`、`.cxx`、`.h`、`.hpp`、`.hh`、`.hxx`**，扩展名不区分大小写。未保存文档跟随 Notepad++ 的 **C** 或 **C++** 语言，也可使用语言选择器中的 **C / C++ (clang-format)**。已保存文件的扩展名优先于语法高亮；手动指定语言仅对本次格式化生效。
+
+已保存文件由 clang-format 从所在目录查找 `.clang-format` / `_clang-format`，项目配置优先于插件的 **C/C++ 风格**。没有项目配置时，可选择 **LLVM**（默认）、**Google** 或 **Microsoft**。未保存文档直接使用所选预设，不继承 Notepad++ 工作目录的配置。换行符遵循 clang-format 的输入检测和项目规则。
+
+缓冲区通过标准输入传递，不写入源文件、不编译代码。使用原生 `--cursor` 结果保留 Unicode 文本中的光标位置，支持一步撤销和过期结果保护。工具报错或格式化不完整时保留原文；clang-format 是格式化工具，不是完整的 C/C++ 语法检查器。项目配置可以调整 include 顺序或关闭格式化。
+
+**检查格式化环境**会验证版本，并使用当前文档目录和所选默认风格格式化 C++ 样本。样本未变化或禁用格式化时报告未验证；其他工具缺失不妨碍检查。CI 使用已校验哈希的 LLVM-MinGW 工具链中的 clang-format 23.1.5，其 x64 可执行文件在 x64 Windows 上原生运行，在 ARM64 runner 上通过 Windows 模拟运行。这不代表已覆盖原生 ARM64 clang-format 或 32 位 Windows。
+
 ### 使用 Ruff 格式化 Python
 
 Python 使用独立的 **Ruff 可执行文件**，无需 Node.js 或 Prettier，也不通过 npm 插件实现。请自行安装 Ruff；已有 Python 时，可执行：
@@ -289,7 +303,7 @@ python -m pip install ruff
 |---|---|
 | **格式化文档** | 格式化当前缓冲区全文，包含尚未保存的修改 |
 | **按指定语言格式化...** | 仅本次覆盖语言选择，保留文件类型、记住的选择、项目选项和忽略规则 |
-| **配置...** | 设置 Node.js、Prettier、Ruff、SQL/Shell 方言和超时时间，并检查格式化工具安装状态 |
+| **配置...** | 设置 Node.js、Prettier、Ruff、clang-format、SQL/Shell 方言、C/C++ 默认风格和超时时间，并检查格式化工具安装状态 |
 | **关于** | 显示版本、支持的格式、运行要求，以及可点击的项目主页 |
 
 **已保存文件**通过路径推断解析器并查找项目配置。**未保存文件**优先使用 Notepad++ 中受支持的文档语言；纯文本中的有效 JSON 会被自动识别。其他情况弹出语言选择窗口，选择仅在当前会话中为该文档记住。
@@ -343,7 +357,7 @@ Prettier 语言的已保存文件使用 Prettier 配置、EditorConfig 和最近
 | 现象 | 下一步 |
 |---|---|
 | 插件菜单没有出现 | 核对 DLL 与 Notepad++ 架构、插件文件夹位置，然后重启 |
-| 点击格式化后打开配置 | Prettier 语言需配置 Node.js 和 Prettier；Python 使用独立的 Ruff 路径 |
+| 点击格式化后打开配置 | Prettier 语言需配置 Node.js 和 Prettier；Python 和 C/C++ 使用各自独立的可执行文件路径 |
 | 提示 Python 需要 Ruff | 自行安装 Ruff，在配置中浏览或自动检测其可执行文件 |
 | Node.js 或 Prettier 加载失败 | 重新自动检测；选择真实 `node.exe` 和包含 `package.json` 的 Prettier 包 |
 | 粘贴代码后选错了语言 | 使用**按指定语言格式化...**；整篇替换会清除记住的选择 |
@@ -358,7 +372,7 @@ Prettier 语言的已保存文件使用 Prettier 配置、EditorConfig 和最近
 | 提示需要 UTF-8 | 选择**编码 → 转为 UTF-8 编码**后重试 |
 | 缓冲区或选区被拒绝 | 保持在 8 MiB 内，使用单个普通光标或选区 |
 
-仍有问题？[提交 Issue](https://github.com/oiltea94/npp-formatter/issues/new)，附上插件、编辑器、Node.js、Prettier 和 Ruff 版本、最小样例、相关配置，以及完整的错误或状态信息。
+仍有问题？[提交 Issue](https://github.com/oiltea94/npp-formatter/issues/new)，附上插件、编辑器、Node.js、Prettier、Ruff 和 clang-format 版本、最小样例、相关配置，以及完整的错误或状态信息。
 
 <a id="development"></a>
 
@@ -373,6 +387,7 @@ npm ci
 python scripts/bootstrap.py
 python tests/download_ruff.py --arch x64
 $env:RUFF_EXE = (Resolve-Path build/x64/ruff/ruff.exe).Path
+$env:CLANG_FORMAT_EXE = (Resolve-Path .tools/llvm-mingw-20261104-ucrt-x86_64/bin/clang-format.exe).Path
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architecture all
 ```
 
@@ -393,7 +408,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Architect
 
 编辑器测试覆盖英文、简体中文和繁体中文，包括实时切换语言。测试检查编辑器架构，并在独立副本中运行，不替换日常使用的安装。可用 `--language en`、`zh-CN` 或 `zh-TW` 测试单个语言；x64/ARM64 编辑器需使用 64 位 Python。CI 在 `windows-latest` 和 `windows-11-arm` 上运行对应架构的原生进程与编辑器测试。
 
-原生插件和进程管理位于 `src/`，Prettier 适配位于 `bridge/`，测试位于 `tests/`。原型每次请求按语言启动一个 Node.js（Prettier）或 Ruff（Python）进程，同时只处理一个格式化请求。[产品规格](https://github.com/oiltea94/npp-formatter/blob/main/docs/SPEC.md)记录当前范围和目标架构。
+原生插件和进程管理位于 `src/`，Prettier 适配位于 `bridge/`，测试位于 `tests/`。原型每次请求按语言启动一个 Node.js（Prettier）、Ruff（Python）或 clang-format（C/C++）进程，同时只处理一个格式化请求。[产品规格](https://github.com/oiltea94/npp-formatter/blob/main/docs/SPEC.md)记录当前范围和目标架构。
 
 </details>
 
@@ -426,7 +441,6 @@ DLL 和“关于”窗口的版本统一来自 `package.json`。打标签前补�
 | 后续方向 | 预期能力 |
 |---|---|
 | 通用工具定义 | 通过配置注册命令行工具 |
-| 更多适配器 | 用 clang-format 格式化 C/C++ |
 | 工具选择 | 按语言设置默认工具、项目覆盖和依赖诊断 |
 | 编辑工作流 | 选区格式化、保存时格式化 |
 | 文本转换 | 压缩、转换和按顺序执行多个工具，最终只写入一次可撤销结果 |

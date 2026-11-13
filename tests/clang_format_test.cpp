@@ -46,13 +46,22 @@ int wmain(int argc, wchar_t** argv) {
         check(!formatter::cppFile(L"Main.java") && !formatter::cppFile(L"app.cs"), "Other language hijacked");
         std::cout << "PASS clang-format project precedence, disk preservation, isolation, overrides and routing\n";
         auto invalid = format("int main( {\n");
-        check(!invalid.at("ok") && !invalid.contains("formatted"), "Incomplete formatting accepted");
+        check(!invalid.at("ok") && invalid.at("canChooseParser") && !invalid.contains("formatted"), "Incomplete formatting accepted");
+        check(invalid.at("error").get<std::string>().find("line 1") != std::string::npos, "Incomplete formatting line diagnostic lost");
         write(L".clang-format", "InvalidSetting: true\n");
         check(!format(source, file).at("ok"), "Invalid config accepted");
         check(formatter::checkClangFormat(argv[1], file, L"LLVM", cancel).at("status") == "error", "Environment ignored bad project config");
         check(formatter::formatCpp(L"", source, L"", 0, L"LLVM", 5000, cancel).at("code") == "MISSING_CLANG_FORMAT", "Missing executable guidance failed");
         check(formatter::checkClangFormat(argv[1], L"", L"LLVM", cancel).at("status") == "available", "Environment sample failed");
         check(fs::equivalent(formatter::detectClangFormat(argv[1], cancel), argv[1]), "Current executable detection failed");
+        // Keep the executable beside its DLLs; test a quoted PATH entry without
+        // making an invalid partial copy of the installed toolchain.
+        auto toolDirectory = fs::absolute(argv[1]).parent_path();
+        const auto originalPath = formatter::environment(L"PATH");
+        struct RestorePath { std::wstring value; ~RestorePath() { SetEnvironmentVariableW(L"PATH", value.c_str()); } } restorePath{originalPath};
+        SetEnvironmentVariableW(L"PATH", (L"\"" + toolDirectory.wstring() + L"\"").c_str());
+        check(fs::equivalent(formatter::detectClangFormat(L"", cancel), toolDirectory / L"clang-format.exe"), "Quoted PATH discovery failed");
+        check(fs::equivalent(formatter::detectClangFormat((project / L"missing.exe").wstring(), cancel), toolDirectory / L"clang-format.exe"), "Detection failed to recover from stale field");
         write(L".clang-format", "DisableFormat: true\n");
         check(formatter::checkClangFormat(argv[1], file, L"LLVM", cancel).at("status") == "error", "Disabled formatting falsely reported available");
         std::cout << "PASS clang-format diagnostics, missing tool, detection and environment probe\n";

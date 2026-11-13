@@ -11,6 +11,7 @@ inline const char* parserForLanguage(int language) {
     case L_TYPESCRIPT: return "typescript";
     case L_JAVA: return "java";
     case L_PYTHON: return "python";
+    case L_C: case L_CPP: return "cpp";
     case L_PHP: return "php";
     case L_SQL: return "sql";
     case L_PROPS: return "dot-properties";
@@ -38,6 +39,7 @@ inline constexpr ParserChoice parserChoices[] = {
     {L"PHP", "php"}, {L"SQL", "sql"}, {L"Properties", "dot-properties"},
     {L"TOML", "toml"}, {L"Shell / Bash", "sh"},
     {L"Python (Ruff)", "python"},
+    {L"C / C++ (clang-format)", "cpp"},
 };
 
 struct SqlDialect { const wchar_t* label; const wchar_t* value; };

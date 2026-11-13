@@ -66,15 +66,17 @@ inline nlohmann::json formatCpp(const std::wstring& executable, const std::strin
         L"--style=" + (saved ? std::wstring(L"file") : clangStyle(fallback)),
         L"--fallback-style=" + clangStyle(fallback), L"--fail-on-incomplete-format"};
     auto result = runProcess(executable, args, text, timeout, cancelled, saved ? fs::path(file).parent_path().wstring() : L"");
-    if (result.exitCode)
-        return {{"ok", false}, {"error", result.error.empty() ? "clang-format failed (exit " + std::to_string(result.exitCode) + ")." : result.error}};
     // --cursor prepends one JSON line; clang-format counts UTF-8 bytes, whereas
     // the shared plugin completion protocol counts UTF-16 code units.
     auto end = result.output.find('\n');
+    if (result.exitCode && (end == std::string::npos || !result.error.empty()))
+        return {{"ok", false}, {"error", result.error.empty() ? "clang-format failed (exit " + std::to_string(result.exitCode) + ")." : result.error}};
     if (end == std::string::npos) throw std::runtime_error("clang-format returned no cursor metadata.");
     auto metadata = nlohmann::json::parse(result.output.substr(0, end));
     if (metadata.value("IncompleteFormat", false))
-        return {{"ok", false}, {"error", "clang-format could not completely format this document. Check the syntax; the original text is unchanged."}};
+        return {{"ok", false}, {"canChooseParser", true},
+                {"error", "clang-format: incomplete formatting at line " + std::to_string(metadata.value("Line", 0)) + ". Check the syntax or selected language; the original text is unchanged."}};
+    if (result.exitCode) return {{"ok", false}, {"error", "clang-format failed (exit " + std::to_string(result.exitCode) + ")."}};
     auto formatted = result.output.substr(end + 1);
     auto position = metadata.at("Cursor").get<int64_t>();
     if (position < 0 || static_cast<size_t>(position) > formatted.size())
