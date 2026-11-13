@@ -12,6 +12,8 @@ import tempfile
 import time
 import sys
 
+from scintilla_text import read_editor_text
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from verify_package import MACHINES, PE, verify_dll
 
@@ -246,7 +248,8 @@ def run(sandbox, architecture, language='en'):
         statusbar = until(lambda: next((w for w in children(main_window) if window_class(w) == 'msctls_statusbar32'), None))
         handle = KERNEL32.OpenProcess(0x438, False, process.pid)
         assert handle, C.get_last_error()
-        memory = KERNEL32.VirtualAllocEx(handle, None, 2 * 1024 * 1024, 0x3000, 0x04)
+        memory_capacity = 2 * 1024 * 1024
+        memory = KERNEL32.VirtualAllocEx(handle, None, memory_capacity, 0x3000, 0x04)
         assert memory, C.get_last_error()
         send = USER32.SendMessageW
 
@@ -256,9 +259,7 @@ def run(sandbox, architecture, language='en'):
             return result.raw
 
         def text(window):
-            size = send(window, 2006, 0, 0)
-            send(window, 2182, size + 1, memory)
-            return read_bytes(size + 1)[:size].decode('utf-8')
+            return read_editor_text(send, read_bytes, window, memory, memory_capacity)
 
         editor = until(lambda: next((w for w in controls if text(w) == original), None))
 

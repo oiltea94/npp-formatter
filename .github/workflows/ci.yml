@@ -25,6 +25,8 @@ jobs:
           python-version: '3.12'
       - name: Test catalog updates and PR reuse without API writes
         run: python -m unittest discover -s tests -p test_catalog.py
+      - name: Test editor text snapshot races
+        run: python -m unittest discover -s tests -p test_scintilla_text.py
 
   build:
     strategy:
