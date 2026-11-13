@@ -6,28 +6,30 @@ No pending changes. / 暂无待发布改动。
 
 ## 0.2.0
 
-### Added / 新增
+### English
+
+#### Added
 
 - Add TOML and Shell / Bash formatting using separately installed `prettier-plugin-toml` and `prettier-plugin-sh`. TOML requires Node.js 20+; Shell requires Prettier 3.6+.
 - Add a saved Shell dialect setting (Bash, POSIX sh, mksh, Bats), with project configuration taking priority.
 - Add **Check formatting environment** in Settings: inspect entered paths, versions, and seven optional language packages using real formatting samples, without installing dependencies or saving settings.
 - Preserve the Shell cursor through whole-document mapping, including Unicode and CRLF, avoiding upstream AST position failures.
+- Add optional PHP, SQL, and Properties formatting with user-installed npm packages, automatic discovery, and localized install-and-retry guidance.
+- Add a persistent SQL dialect setting; saved documents prioritize project configuration, and unsaved selections survive live interface language changes.
+- Format XML, SVG, XSD, XSL/XSLT, XAML, and RESX with the separately installed `@prettier/plugin-xml` package. Discover it automatically and preserve XML whitespace semantics by default.
+- Add dedicated JSONC, MDX, and Handlebars choices using Prettier's built-in parsers.
+- Explain the optional XML dependency in English, Simplified Chinese, and Traditional Chinese, including install-and-retry guidance.
+
+### 中文
+
+#### 新增
 
 - 通过单独安装的 `prettier-plugin-toml` 和 `prettier-plugin-sh` 支持 TOML 与 Shell / Bash；TOML 需要 Node.js 20+，Shell 需要 Prettier 3.6+。
 - 新增可保存的 Shell 方言设置（Bash、POSIX sh、mksh、Bats），项目配置优先。
 - 配置窗口新增**检查格式化环境**：使用真实格式化样本检查当前输入的路径、版本和七种可选语言扩展，不安装依赖、不保存配置。
 - 使用全文映射保留 Shell 光标位置，覆盖 Unicode 和 CRLF，避开上游语法树位置错误。
-
-- Add optional PHP, SQL, and Properties formatting with user-installed npm packages, automatic discovery, and localized install-and-retry guidance.
-- Add a persistent SQL dialect setting; saved documents prioritize project configuration, and unsaved selections survive live interface language changes.
-
 - 通过用户自行安装的 npm 扩展支持 PHP、SQL 和 Properties，自动查找依赖并提供三语安装重试提示。
 - 新增可保存的 SQL 方言设置，已保存文档优先遵循项目配置，切换界面语言时保留尚未保存的选择。
-
-- Format XML, SVG, XSD, XSL/XSLT, XAML, and RESX with the separately installed `@prettier/plugin-xml` package. Discover it automatically and preserve XML whitespace semantics by default.
-- Add dedicated JSONC, MDX, and Handlebars choices using Prettier's built-in parsers.
-- Explain the optional XML dependency in English, Simplified Chinese, and Traditional Chinese, including install-and-retry guidance.
-
 - 通过单独安装的 `@prettier/plugin-xml` 扩展支持 XML、SVG、XSD、XSL/XSLT、XAML 和 RESX，自动查找扩展，默认保留 XML 空白语义。
 - 新增 JSONC、MDX 和 Handlebars 独立语言选项，使用 Prettier 内置解析器。
 - 在英文、简体中文和繁体中文界面中说明 XML 可选依赖，并提供安装后重试的提示。
