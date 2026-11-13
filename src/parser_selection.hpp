@@ -13,6 +13,8 @@ inline const char* parserForLanguage(int language) {
     case L_PHP: return "php";
     case L_SQL: return "sql";
     case L_PROPS: return "dot-properties";
+    case L_TOML: return "toml";
+    case L_BASH: return "sh";
     case L_JSON: return "json";
     case L_JSON5: return "json5";
     case L_HTML: return "html";
@@ -33,6 +35,7 @@ inline constexpr ParserChoice parserChoices[] = {
     {L"Java", "java"},
     {L"XML", "xml"}, {L"JSONC", "jsonc"}, {L"MDX", "mdx"}, {L"Handlebars", "glimmer"},
     {L"PHP", "php"}, {L"SQL", "sql"}, {L"Properties", "dot-properties"},
+    {L"TOML", "toml"}, {L"Shell / Bash", "sh"},
 };
 
 struct SqlDialect { const wchar_t* label; const wchar_t* value; };
@@ -49,6 +52,15 @@ inline constexpr SqlDialect sqlDialects[] = {
 inline size_t sqlDialectIndex(std::wstring_view value) {
     for (size_t i = 0; i < std::size(sqlDialects); ++i)
         if (value == sqlDialects[i].value) return i;
+    return 0;
+}
+struct ShellDialect { const wchar_t* label; int value; };
+inline constexpr ShellDialect shellDialects[] = {
+    {L"Bash", 1}, {L"POSIX sh", 2}, {L"mksh", 4}, {L"Bats", 8},
+};
+inline size_t shellDialectIndex(int value) {
+    for (size_t i = 0; i < std::size(shellDialects); ++i)
+        if (value == shellDialects[i].value) return i;
     return 0;
 }
 } // namespace formatter

@@ -1,10 +1,10 @@
 {
   "name": "npp-formatter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "A configurable code formatter and text transformer for Notepad++",
   "scripts": {
-    "test": "node --test tests/bridge.test.cjs tests/java.test.cjs tests/xml.test.cjs tests/extra-languages.test.cjs"
+    "test": "node --test tests/bridge.test.cjs tests/java.test.cjs tests/xml.test.cjs tests/extra-languages.test.cjs tests/environment.test.cjs"
   },
   "engines": {
     "node": ">=18"
@@ -15,6 +15,8 @@
     "prettier": "3.6.2",
     "prettier-plugin-java": "2.11.0",
     "prettier-plugin-properties": "0.3.1",
-    "prettier-plugin-sql": "0.20.0"
+    "prettier-plugin-sh": "0.20.2",
+    "prettier-plugin-sql": "0.20.0",
+    "prettier-plugin-toml": "4.1.0"
   }
 }

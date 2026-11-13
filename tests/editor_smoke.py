@@ -313,8 +313,10 @@ def run(sandbox, architecture, language='en'):
             assert control_text(dialog, identifier) == labels[key]
         assert not get_control(dialog, 103), 'Global untitled parser setting should be removed'
         assert control_text(dialog, 106) == 'SQL', 'Old settings must default to standard SQL'
+        assert control_text(dialog, 107) == 'Bash', 'Old settings must default to Bash'
+        send(get_control(dialog, 107), 0x14E, 1, 0)
         send(get_control(dialog, 106), 0x14E, 1, 0)  # MySQL, not saved until Save.
-        for identifier in (301, 302, 304, 306):
+        for identifier in (301, 302, 304, 306, 307):
             label = control_text(dialog, identifier)
             assert label
             if language != 'en':
@@ -356,6 +358,7 @@ def run(sandbox, architecture, language='en'):
         dialog = open_settings()
         assert control_text(dialog, 102) == str(ROOT / 'node_modules' / 'prettier')
         assert control_text(dialog, 106) == 'SQL', 'Cancel persisted the SQL dialect'
+        assert control_text(dialog, 107) == 'Bash', 'Cancel persisted the Shell dialect'
         USER32.PostMessageW(dialog, 0x111, 203, 0)
         until(lambda: labels['detecting'] in control_text(dialog, 105))
         started = time.monotonic()
@@ -369,21 +372,60 @@ def run(sandbox, architecture, language='en'):
         dialog = open_settings()
         detect(dialog, 204)
         send(get_control(dialog, 106), 0x14E, 1, 0)
+        send(get_control(dialog, 107), 0x14E, 1, 0)
         USER32.PostMessageW(dialog, 0x111, 1, 0)
         until(lambda: not USER32.IsWindow(dialog))
         saved = configparser.ConfigParser(interpolation=None)
         saved.read(ini_path, encoding='utf-16')
         assert 'UntitledParser' not in saved['Formatter'], 'Legacy global parser was written back'
         assert saved['Formatter']['SqlDialect'] == 'mysql'
+        assert saved['Formatter']['ShellDialect'] == '2'
         assert os.path.samefile(saved['Formatter']['PrettierPath'], project_prettier), 'Saved Prettier path differs from detected package'
         assert os.path.samefile(saved['Formatter']['NodePath'], node), 'Saved Node path differs from detected executable'
         assert ini_path.with_suffix('.ini.bak').read_bytes() == before
         print('PASS settings: detection buttons, Node/project discovery, preserve on failure, Cancel and explicit Save', flush=True)
         print('PASS settings placement: owner centering, moved owner and screen-edge clamping', flush=True)
 
+        def check_environment(dialog):
+            USER32.PostMessageW(dialog, 0x111, 205, 0)
+            until(lambda: not USER32.IsWindowEnabled(get_control(dialog, 205)))
+            assert not USER32.IsWindowEnabled(get_control(dialog, 1))
+            until(lambda: USER32.IsWindowEnabled(get_control(dialog, 205)), timeout=35)
+            report_text = control_text(dialog, 108)
+            assert 'Node.js:' in report_text and 'Prettier:' in report_text, control_text(dialog, 105)
+            return report_text
+
+        environment_before = ini_path.read_bytes()
+        dialog = open_settings()
+        assert control_text(dialog, 205) == {
+            'en': 'Check formatting environment', 'zh-CN': '检查格式化环境', 'zh-TW': '檢查格式化環境',
+        }[language]
+        report_text = check_environment(dialog)
+        missing_label = {'en': 'Not installed', 'zh-CN': '未安装', 'zh-TW': '未安裝'}[language]
+        assert f'prettier-plugin-toml: {missing_label}' in report_text
+        assert f'prettier-plugin-sh: {missing_label}' in report_text
+        set_control(dialog, 102, str(sandbox / 'missing-prettier'))
+        assert control_text(dialog, 108) == '', 'Changing paths left stale environment results'
+        invalid_report = check_environment(dialog)
+        assert 'package.json' in invalid_report
+        assert 'prettier-plugin-toml:' not in invalid_report
+        assert ini_path.read_bytes() == environment_before, 'Environment check saved settings'
+        USER32.PostMessageW(dialog, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        dialog = open_settings()
+        USER32.PostMessageW(dialog, 0x111, 205, 0)
+        until(lambda: not USER32.IsWindowEnabled(get_control(dialog, 205)))
+        started = time.monotonic()
+        USER32.PostMessageW(dialog, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        assert time.monotonic() - started < 2, 'Cancel blocked during environment check'
+        print('PASS environment: localized check, missing packages, unsaved paths, invalid package, stale report and Cancel', flush=True)
+
         if language == 'en':
             dialog = open_settings()
             assert control_text(dialog, 106) == 'MySQL'
+            assert control_text(dialog, 107) == 'POSIX sh'
+            send(get_control(dialog, 107), 0x14E, 2, 0)
             send(get_control(dialog, 106), 0x14E, 5, 0)  # SQL Server, unsaved.
             set_control(dialog, 101, '')
             set_control(dialog, 102, 'unsaved path')
@@ -422,15 +464,25 @@ def run(sandbox, architecture, language='en'):
                     until(lambda: USER32.IsWindowEnabled(get_control(dialog, 203)), timeout=15)
                     assert os.path.samefile(control_text(dialog, 101), node)
                     bridge_file.write_bytes(original_bridge)
-                assert control_text(dialog, 105).startswith(translated['detected'])
+                if target == 'zh-CN':
+                    assert control_text(dialog, 105).startswith(translated['detected'])
+                else:
+                    assert control_text(dialog, 105).startswith({
+                        'en': 'Check finished.', 'zh-TW': '檢查完成',
+                    }[target])
+                    assert 'Node.js:' in control_text(dialog, 108)
+                    assert {'en': 'Check failed', 'zh-TW': '檢查失敗'}[target] in control_text(dialog, 108)
                 assert control_text(dialog, 102) == 'unsaved path'
                 assert control_text(dialog, 104) == '15000'
                 assert control_text(dialog, 106) == 'SQL Server (T-SQL)'
+                assert control_text(dialog, 107) == 'mksh'
                 assert control_text(dialog, 306) == {
                     'en': 'SQL dialect (project config takes priority)',
                     'zh-CN': 'SQL 方言（项目配置优先）',
                     'zh-TW': 'SQL 方言（專案設定優先）',
                 }[target]
+                if target == 'zh-CN':
+                    check_environment(dialog)  # Results must retranslate without losing unsaved paths.
             # The General page containing the combo is a child of Preferences.
             preferences = USER32.GetParent(USER32.GetParent(combo))
             USER32.PostMessageW(preferences, 0x10, 0, 0)
@@ -459,7 +511,7 @@ def run(sandbox, architecture, language='en'):
         assert labels['about_body'] in about_text, about_text
         assert 'prettier-plugin-java' in about_text, 'About must explain the optional Java dependency'
         assert '@prettier/plugin-xml' in about_text, 'About must explain the optional XML dependency'
-        for package in ('@prettier/plugin-php', 'prettier-plugin-sql', 'prettier-plugin-properties'):
+        for package in ('@prettier/plugin-php', 'prettier-plugin-sql', 'prettier-plugin-properties', 'prettier-plugin-toml', 'prettier-plugin-sh'):
             assert package in about_text, f'About must explain {package}'
         for name in ('JSONC', 'MDX', 'Handlebars'):
             assert name in about_text, f'About must include {name}'
@@ -838,11 +890,16 @@ def run(sandbox, architecture, language='en'):
             metadata = json.loads((package_dir / 'package.json').read_text(encoding='utf-8'))
             for dependency in metadata.get('dependencies', {}):
                 install_test_package(dependency)
+            for dependency in metadata.get('optionalDependencies', {}):
+                if (ROOT / 'node_modules' / dependency).is_dir():
+                    install_test_package(dependency)
 
         for name, package, host_language, extension, source, formatted in (
             ('PHP', '@prettier/plugin-php', 1, 'php', '<?php $answer=1+2;', '<?php $answer = 1 + 2;\n'),
             ('SQL', 'prettier-plugin-sql', 17, 'sql', 'select a,b from users;', 'select\n  a,\n  b\nfrom\n  users;\n'),
             ('Properties', 'prettier-plugin-properties', 34, 'properties', 'greeting=中文😀', 'greeting = 中文😀\n'),
+            ('TOML', 'prettier-plugin-toml', 92, 'toml', 'answer=42', 'answer = 42\n'),
+            ('Shell / Bash', 'prettier-plugin-sh', 26, 'sh', 'if true;then echo "hello";fi', 'if true; then echo "hello"; fi\n'),
         ):
             new_document(source, host_language)
             USER32.PostMessageW(main_window, 0x111, command, 0)
@@ -851,7 +908,10 @@ def run(sandbox, architecture, language='en'):
             message = automation.text(missing)
             expected_message = (f'{name} formatting requires {package}.' if language == 'en'
                                 else f'{name} 格式化需要 {package}。')
-            assert expected_message in message, message
+            if name in ('TOML', 'Shell / Bash'):
+                assert ('Node.js 20+' if name == 'TOML' else 'Prettier 3.6+') in message
+            else:
+                assert expected_message in message, message
             assert f'npm install --global {package}' in message
             assert text(editor) == source
             USER32.PostMessageW(missing, 0x10, 0, 0)
@@ -901,7 +961,46 @@ def run(sandbox, architecture, language='en'):
         project_config.unlink()
         assert ini_path.read_bytes() == settings_before_parsers
         print('PASS SQL dialect: persisted setting, original error, retry after change and project precedence', flush=True)
-        report = {'architecture': architecture, 'language': language, 'checks': 23,
+
+        shell_source = 'values=(one two)'
+        new_document(shell_source, 26)
+        USER32.PostMessageW(main_window, 0x111, command, 0)
+        error_dialog = wait_parse_error()  # Saved POSIX setting rejects Bash arrays.
+        assert text(editor) == shell_source
+        USER32.PostMessageW(error_dialog, 0x10, 0, 0)
+        until(lambda: not USER32.IsWindow(error_dialog))
+        dialog = open_settings()
+        assert control_text(dialog, 107) == 'POSIX sh'
+        send(get_control(dialog, 107), 0x14E, 0, 0)
+        USER32.PostMessageW(dialog, 0x111, 1, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        format_to(shell_source + '\n')
+        dialog = open_settings()
+        assert control_text(dialog, 107) == 'Bash'
+        send(get_control(dialog, 107), 0x14E, 1, 0)
+        USER32.PostMessageW(dialog, 0x111, 1, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        filename = str(sandbox / 'override.sh').encode('utf-16-le') + b'\0\0'
+        assert KERNEL32.WriteProcessMemory(handle, memory, C.c_char_p(filename), len(filename), None)
+        assert send(main_window, 2024 + 78, 0, memory)
+        project_config.write_text('module.exports={variant:1};', encoding='utf-8')
+        set_text(shell_source)
+        format_to(shell_source + '\n')
+        project_config.unlink()
+        assert ini_path.read_bytes() == settings_before_parsers
+        print('PASS Shell dialect: persisted setting, parse failure, retry and project precedence', flush=True)
+        dialog = open_settings()
+        report_text = check_environment(dialog)
+        available = {'en': 'Available', 'zh-CN': '可用', 'zh-TW': '可用'}[language]
+        for package in ('prettier-plugin-java', '@prettier/plugin-xml', '@prettier/plugin-php',
+                        'prettier-plugin-sql', 'prettier-plugin-properties', 'prettier-plugin-toml', 'prettier-plugin-sh'):
+            assert f'{package}: {available}' in report_text, report_text
+        assert str(sandbox / 'override.sh') in report_text
+        assert ini_path.read_bytes() == settings_before_parsers
+        USER32.PostMessageW(dialog, 0x111, 2, 0)
+        until(lambda: not USER32.IsWindow(dialog))
+        print('PASS environment: all seven optional extensions, versions and current document context', flush=True)
+        report = {'architecture': architecture, 'language': language, 'checks': 28,
                   'live_language_switch': language == 'en', 'result': 'PASS'}
         (ROOT / 'build' / architecture / f'editor-smoke-{language}.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     finally:

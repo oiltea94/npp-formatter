@@ -2,6 +2,22 @@
 
 ## Unreleased / 尚未发布
 
+No pending changes. / 暂无待发布改动。
+
+## 0.2.0
+
+### Added / 新增
+
+- Add TOML and Shell / Bash formatting using separately installed `prettier-plugin-toml` and `prettier-plugin-sh`. TOML requires Node.js 20+; Shell requires Prettier 3.6+.
+- Add a saved Shell dialect setting (Bash, POSIX sh, mksh, Bats), with project configuration taking priority.
+- Add **Check formatting environment** in Settings: inspect entered paths, versions, and seven optional language packages using real formatting samples, without installing dependencies or saving settings.
+- Preserve the Shell cursor through whole-document mapping, including Unicode and CRLF, avoiding upstream AST position failures.
+
+- 通过单独安装的 `prettier-plugin-toml` 和 `prettier-plugin-sh` 支持 TOML 与 Shell / Bash；TOML 需要 Node.js 20+，Shell 需要 Prettier 3.6+。
+- 新增可保存的 Shell 方言设置（Bash、POSIX sh、mksh、Bats），项目配置优先。
+- 配置窗口新增**检查格式化环境**：使用真实格式化样本检查当前输入的路径、版本和七种可选语言扩展，不安装依赖、不保存配置。
+- 使用全文映射保留 Shell 光标位置，覆盖 Unicode 和 CRLF，避开上游语法树位置错误。
+
 - Add optional PHP, SQL, and Properties formatting with user-installed npm packages, automatic discovery, and localized install-and-retry guidance.
 - Add a persistent SQL dialect setting; saved documents prioritize project configuration, and unsaved selections survive live interface language changes.
 

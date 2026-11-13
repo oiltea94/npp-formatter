@@ -20,15 +20,17 @@ inline Language fromNativeFileName(std::string filename) {
 
 enum class Text {
     Empty, Format, Settings, About, SettingsTitle, AboutTitle, ErrorTitle,
-    NodeLabel, PrettierLabel, TimeoutLabel, SqlDialectLabel, Browse, Detect, Save, Cancel,
+    NodeLabel, PrettierLabel, TimeoutLabel, SqlDialectLabel, ShellDialectLabel, Browse, Detect, Save, Cancel,
     NodeFilter, PrettierFilter, NodeFirst, DetectNode, DetectPrettier, Detected,
     DetectionFailed, DetectionTimerError, TimeoutError, NodePathError, PrettierPathError,
     CreateSettingsError, WriteSettingsError, ReplaceSettingsError, AboutBody,
     ProjectHomepage, OpenHomepageError, AboutDialogError,
     ParserTitle, ParserPrompt, ParserDialogError, ChooseLanguage, FormatCancelled,
     FormatAs, ParserOncePrompt, ParseErrorTitle, ParseErrorPrompt, ErrorDetails, ChooseAgain,
-    JavaPluginMissing, XmlPluginMissing, PhpPluginMissing, SqlPluginMissing, PropertiesPluginMissing,
-    Busy, Formatting, Discarded, Ignored, Unchanged, Formatted, FormatFailed, Count
+    JavaPluginMissing, XmlPluginMissing, PhpPluginMissing, SqlPluginMissing, PropertiesPluginMissing, TomlPluginMissing, ShellPluginMissing,
+    Busy, Formatting, Discarded, Ignored, Unchanged, Formatted, FormatFailed,
+    EnvironmentCheck, CheckingEnvironment, EnvironmentChecked, EnvironmentAvailable,
+    EnvironmentMissing, EnvironmentError, EnvironmentBuiltins, EnvironmentScope, EnvironmentNotChecked, EnvironmentInvalidated, Count
 };
 
 struct Translation { const wchar_t* english; const wchar_t* simplified; const wchar_t* traditional; };
@@ -44,6 +46,7 @@ inline constexpr Translation translations[] = {
     {L"Prettier 3.x package directory (browse to its package.json)", L"Prettier 3.x 包目录（浏览时选择 package.json）", L"Prettier 3.x 套件目錄（瀏覽時選擇 package.json）"},
     {L"Timeout in milliseconds (1000 - 120000)", L"超时时间，毫秒（1000 - 120000）", L"逾時時間，毫秒（1000 - 120000）"},
     {L"SQL dialect (project config takes priority)", L"SQL 方言（项目配置优先）", L"SQL 方言（專案設定優先）"},
+    {L"Shell dialect (project config takes priority)", L"Shell 方言（项目配置优先）", L"Shell 方言（專案設定優先）"},
     {L"Browse...", L"浏览...", L"瀏覽..."},
     {L"Auto-detect", L"自动检测", L"自動偵測"},
     {L"Save", L"保存", L"儲存"},
@@ -62,9 +65,9 @@ inline constexpr Translation translations[] = {
     {L"Could not create the settings file.", L"创建配置文件失败。", L"建立設定檔失敗。"},
     {L"Could not write settings.", L"写入配置失败。", L"寫入設定失敗。"},
     {L"Could not replace settings file.", L"替换配置文件失败。", L"取代設定檔失敗。"},
-    {L"NppFormatter " NPP_FORMATTER_VERSION_W L" prototype\n\nRequires user-installed Node.js 18+ and Prettier 3.x.\nConfigure both paths in Settings. UTF-8 buffers, full-document formatting.\n\nBuilt-in formatting languages:\nJavaScript / JSX, TypeScript / TSX, JSON, JSON5, JSONC, HTML, CSS, SCSS, Less, YAML, Markdown, MDX, Handlebars, GraphQL, Vue, Angular HTML.\nJava: requires user-installed prettier-plugin-java.\nXML / SVG / XSD / XSLT / XAML / RESX: requires @prettier/plugin-xml.\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\n\nAdditional saved-file formats: Flow, MJML, PostCSS, JSON.stringify.\n\nAssign shortcuts through Notepad++ Shortcut Mapper.\nNode.js, Prettier and language plugins are not bundled.",
-     L"NppFormatter " NPP_FORMATTER_VERSION_W L" 原型版本\n\n需要自行安装 Node.js 18+ 和 Prettier 3.x。\n请在配置中选择或自动检测路径。支持 UTF-8 文档的全文格式化。\n\n内置格式化语言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、JSONC、HTML、CSS、SCSS、Less、YAML、Markdown、MDX、Handlebars、GraphQL、Vue、Angular HTML。\nJava：需要自行安装 prettier-plugin-java。\nXML / SVG / XSD / XSLT / XAML / RESX：需要 @prettier/plugin-xml。\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\n\n已保存文件另支持：Flow、MJML、PostCSS、JSON.stringify。\n\n可通过 Notepad++ 的快捷键管理设置快捷键。\n插件不捆绑 Node.js、Prettier 或语言扩展包。",
-     L"NppFormatter " NPP_FORMATTER_VERSION_W L" 原型版本\n\n需要自行安裝 Node.js 18+ 和 Prettier 3.x。\n請在設定中選擇或自動偵測路徑。支援 UTF-8 文件的全文格式化。\n\n內建格式化語言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、JSONC、HTML、CSS、SCSS、Less、YAML、Markdown、MDX、Handlebars、GraphQL、Vue、Angular HTML。\nJava：需要自行安裝 prettier-plugin-java。\nXML / SVG / XSD / XSLT / XAML / RESX：需要 @prettier/plugin-xml。\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\n\n已儲存檔案另支援：Flow、MJML、PostCSS、JSON.stringify。\n\n可透過 Notepad++ 的快捷鍵管理設定快捷鍵。\n外掛不附帶 Node.js、Prettier 或語言擴充套件。"},
+    {L"NppFormatter " NPP_FORMATTER_VERSION_W L" prototype\n\nRequires user-installed Node.js 18+ and Prettier 3.x.\nConfigure both paths in Settings. UTF-8 buffers, full-document formatting.\n\nBuilt-in formatting languages:\nJavaScript / JSX, TypeScript / TSX, JSON, JSON5, JSONC, HTML, CSS, SCSS, Less, YAML, Markdown, MDX, Handlebars, GraphQL, Vue, Angular HTML.\nJava: requires user-installed prettier-plugin-java.\nXML / SVG / XSD / XSLT / XAML / RESX: requires @prettier/plugin-xml.\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\nTOML: prettier-plugin-toml (Node.js 20+).\nShell / Bash: prettier-plugin-sh (Prettier 3.6+).\n\nAdditional saved-file formats: Flow, MJML, PostCSS, JSON.stringify.\n\nAssign shortcuts through Notepad++ Shortcut Mapper.\nNode.js, Prettier and language plugins are not bundled.",
+     L"NppFormatter " NPP_FORMATTER_VERSION_W L" 原型版本\n\n需要自行安装 Node.js 18+ 和 Prettier 3.x。\n请在配置中选择或自动检测路径。支持 UTF-8 文档的全文格式化。\n\n内置格式化语言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、JSONC、HTML、CSS、SCSS、Less、YAML、Markdown、MDX、Handlebars、GraphQL、Vue、Angular HTML。\nJava：需要自行安装 prettier-plugin-java。\nXML / SVG / XSD / XSLT / XAML / RESX：需要 @prettier/plugin-xml。\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\nTOML: prettier-plugin-toml (Node.js 20+).\nShell / Bash: prettier-plugin-sh (Prettier 3.6+).\n\n已保存文件另支持：Flow、MJML、PostCSS、JSON.stringify。\n\n可通过 Notepad++ 的快捷键管理设置快捷键。\n插件不捆绑 Node.js、Prettier 或语言扩展包。",
+     L"NppFormatter " NPP_FORMATTER_VERSION_W L" 原型版本\n\n需要自行安裝 Node.js 18+ 和 Prettier 3.x。\n請在設定中選擇或自動偵測路徑。支援 UTF-8 文件的全文格式化。\n\n內建格式化語言：\nJavaScript / JSX、TypeScript / TSX、JSON、JSON5、JSONC、HTML、CSS、SCSS、Less、YAML、Markdown、MDX、Handlebars、GraphQL、Vue、Angular HTML。\nJava：需要自行安裝 prettier-plugin-java。\nXML / SVG / XSD / XSLT / XAML / RESX：需要 @prettier/plugin-xml。\nPHP: @prettier/plugin-php; SQL: prettier-plugin-sql.\nProperties: prettier-plugin-properties.\nTOML: prettier-plugin-toml (Node.js 20+).\nShell / Bash: prettier-plugin-sh (Prettier 3.6+).\n\n已儲存檔案另支援：Flow、MJML、PostCSS、JSON.stringify。\n\n可透過 Notepad++ 的快捷鍵管理設定快捷鍵。\n外掛不附帶 Node.js、Prettier 或語言擴充套件。"},
     {L"Project homepage:", L"项目主页：", L"專案首頁："},
     {L"Could not open the project homepage. Copy this address into your browser:\nhttps://github.com/oiltea94/npp-formatter",
      L"打开项目主页失败。请将此地址复制到浏览器：\nhttps://github.com/oiltea94/npp-formatter",
@@ -102,6 +105,12 @@ inline constexpr Translation translations[] = {
     {L"Properties formatting requires prettier-plugin-properties.\n\nFor saved files, install it in the project:\nnpm install --save-dev prettier-plugin-properties\n\nFor untitled documents, install it alongside the Prettier selected in Settings. If that Prettier is global, run:\nnpm install --global prettier-plugin-properties\n\nThen retry formatting. Your text has not been changed.",
      L"Properties 格式化需要 prettier-plugin-properties。\n\n已保存文件可在项目中安装：\nnpm install --save-dev prettier-plugin-properties\n\n未保存文档需将它安装在配置中所选 Prettier 的同一位置。如果该 Prettier 是全局安装，运行：\nnpm install --global prettier-plugin-properties\n\n安装后重新格式化即可。文档内容未修改。",
      L"Properties 格式化需要 prettier-plugin-properties。\n\n已儲存檔案可在專案中安裝：\nnpm install --save-dev prettier-plugin-properties\n\n未儲存文件需將它安裝在設定中所選 Prettier 的相同位置。若該 Prettier 為全域安裝，執行：\nnpm install --global prettier-plugin-properties\n\n安裝後重新格式化即可。文件內容未修改。"},
+    {L"TOML formatting requires Node.js 20+ and prettier-plugin-toml.\n\nInstall in your project:\nnpm install --save-dev prettier-plugin-toml\n\nFor untitled documents, install alongside your configured Prettier. For global Prettier:\nnpm install --global prettier-plugin-toml\n\nThen retry. Your text has not been changed.",
+     L"TOML 格式化需要 Node.js 20+ 和 prettier-plugin-toml。\n\n在项目中安装：\nnpm install --save-dev prettier-plugin-toml\n\n未保存文档需安装在所选 Prettier 的同一位置。全局 Prettier 使用：\nnpm install --global prettier-plugin-toml\n\n安装后重试，文档内容未修改。",
+     L"TOML 格式化需要 Node.js 20+ 和 prettier-plugin-toml。\n\n在專案中安裝：\nnpm install --save-dev prettier-plugin-toml\n\n未儲存文件需安裝在所選 Prettier 的相同位置。全域 Prettier 使用：\nnpm install --global prettier-plugin-toml\n\n安裝後重試，文件內容未修改。"},
+    {L"Shell formatting requires Prettier 3.6+ and prettier-plugin-sh.\n\nInstall in your project:\nnpm install --save-dev prettier-plugin-sh\n\nFor untitled documents, install alongside your configured Prettier. For global Prettier:\nnpm install --global prettier-plugin-sh\n\nThen retry. Your text has not been changed.",
+     L"Shell 格式化需要 Prettier 3.6+ 和 prettier-plugin-sh。\n\n在项目中安装：\nnpm install --save-dev prettier-plugin-sh\n\n未保存文档需安装在所选 Prettier 的同一位置。全局 Prettier 使用：\nnpm install --global prettier-plugin-sh\n\n安装后重试，文档内容未修改。",
+     L"Shell 格式化需要 Prettier 3.6+ 和 prettier-plugin-sh。\n\n在專案中安裝：\nnpm install --save-dev prettier-plugin-sh\n\n未儲存文件需安裝在所選 Prettier 的相同位置。全域 Prettier 使用：\nnpm install --global prettier-plugin-sh\n\n安裝後重試，文件內容未修改。"},
     {L"NppFormatter: formatting already in progress", L"NppFormatter：正在格式化，请稍候", L"NppFormatter：正在格式化，請稍候"},
     {L"NppFormatter: formatting...", L"NppFormatter：正在格式化...", L"NppFormatter：正在格式化..."},
     {L"NppFormatter: document changed; result discarded", L"NppFormatter：文档已变化，已丢弃结果", L"NppFormatter：文件已變更，已捨棄結果"},
@@ -109,6 +118,16 @@ inline constexpr Translation translations[] = {
     {L"NppFormatter: already formatted", L"NppFormatter：无需格式化", L"NppFormatter：無需格式化"},
     {L"NppFormatter: formatted (Ctrl+Z to undo)", L"NppFormatter：格式化完成（Ctrl+Z 撤销）", L"NppFormatter：格式化完成（Ctrl+Z 復原）"},
     {L"NppFormatter: formatting failed", L"NppFormatter：格式化失败", L"NppFormatter：格式化失敗"},
+    {L"Check formatting environment", L"检查格式化环境", L"檢查格式化環境"},
+    {L"Checking versions and formatting samples...", L"正在检查版本并格式化测试样本...", L"正在檢查版本並格式化測試樣本..."},
+    {L"Check finished. Review the results below. Settings have not been saved.", L"检查完成，请查看下方结果。尚未保存配置。", L"檢查完成，請查看下方結果。尚未儲存設定。"},
+    {L"Available", L"可用", L"可用"},
+    {L"Not installed", L"未安装", L"未安裝"},
+    {L"Check failed", L"检查失败", L"檢查失敗"},
+    {L"Built-in languages: available. Optional extensions below passed a sample check when marked Available.", L"内置语言：可用。以下扩展标记为可用时表示已通过样本检查。", L"內建語言：可用。以下擴充套件標記為可用時表示已通過樣本檢查。"},
+    {L"Document at check start (blank = untitled):", L"检查开始时的文档（空白表示未保存）：", L"檢查開始時的文件（空白表示未儲存）："},
+    {L"Language checks were not completed. Fix the error above and retry.", L"尚未完成语言检查，请修复上述错误后重试。", L"尚未完成語言檢查，請修復上述錯誤後重試。"},
+    {L"Paths changed. Check the environment again.", L"路径已更改，请重新检查环境。", L"路徑已變更，請重新檢查環境。"},
 };
 static_assert(sizeof(translations) / sizeof(translations[0]) == static_cast<size_t>(Text::Count));
 

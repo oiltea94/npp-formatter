@@ -88,6 +88,8 @@ const optionalPlugins = [
   { parser: 'php', name: '@prettier/plugin-php', code: 'MISSING_PHP_PLUGIN', extensions: ['.php', '.phtml'] },
   { parser: 'sql', name: 'prettier-plugin-sql', code: 'MISSING_SQL_PLUGIN', extensions: ['.sql'] },
   { parser: 'dot-properties', name: 'prettier-plugin-properties', code: 'MISSING_PROPERTIES_PLUGIN', extensions: ['.properties'] },
+  { parser: 'toml', name: 'prettier-plugin-toml', code: 'MISSING_TOML_PLUGIN', extensions: ['.toml'] },
+  { parser: 'sh', name: 'prettier-plugin-sh', code: 'MISSING_SH_PLUGIN', extensions: ['.sh', '.bash'] },
 ];
 
 function resolveOptionalPlugin(dependency, fromFiles) {
@@ -107,28 +109,23 @@ function resolveOptionalPlugin(dependency, fromFiles) {
 async function addOptionalPlugin(dependency, plugins, fromFiles) {
   // Respect project-supplied parsers, including plugin objects and custom paths.
   for (let i = 0; i < plugins.length; ++i) {
+    const entry = typeof plugins[i] === 'string' ? plugins[i] : undefined;
     if (typeof plugins[i] === 'string') {
       const imported = await import(pathToFileURL(plugins[i]).href);
       plugins[i] = imported.default ?? imported;
     }
-    if (plugins[i]?.parsers?.[dependency.parser]) return;
+    if (plugins[i]?.parsers?.[dependency.parser]) return entry;
   }
-  const imported = await import(pathToFileURL(resolveOptionalPlugin(dependency, fromFiles)).href);
+  const entry = resolveOptionalPlugin(dependency, fromFiles);
+  const imported = await import(pathToFileURL(entry).href);
   const plugin = imported.default ?? imported;
   if (!plugin.parsers?.[dependency.parser])
     throw new Error(`The installed ${dependency.name} does not provide a ${dependency.parser} parser.`);
   plugins.push(plugin);
+  return entry;
 }
 
-async function run(request) {
-  if (request?.operation === 'detectNode') {
-    if (Number(process.versions.node.split('.')[0]) < 18) throw new Error('Node.js 18 or later is required.');
-    return { ok: true, nodePath: process.execPath, version: process.versions.node };
-  }
-  if (request?.operation === 'detectPrettier') return detectPrettier(request);
-  if (!request || typeof request.text !== 'string') throw new Error('text must be a string.');
-  if (!Number.isInteger(request.cursorOffset) || request.cursorOffset < 0 ||
-      request.cursorOffset > request.text.length) throw new Error('Invalid UTF-16 cursorOffset.');
+async function loadPrettier(request) {
   if (typeof request.prettierPath !== 'string' || !path.isAbsolute(request.prettierPath)) {
     throw new Error('Set an absolute Prettier package directory in Settings.');
   }
@@ -141,7 +138,88 @@ async function run(request) {
   }
   const entry = require.resolve(request.prettierPath);
   const imported = await import(pathToFileURL(entry).href);
-  const prettier = imported.default ?? imported;
+  return { prettier: imported.default ?? imported, packageFile };
+}
+
+function configuredPlugins(config, from, packageFile) {
+  return (config?.plugins ?? []).map(plugin => {
+    if (typeof plugin !== 'string') return plugin;
+    const dependency = optionalPlugins.find(item => item.name === plugin);
+    return dependency ? resolveOptionalPlugin(dependency, [from, packageFile]) : createRequire(from).resolve(plugin);
+  });
+}
+
+function checkRequirements(parser, prettier) {
+  if (parser === 'toml' && Number(process.versions.node.split('.')[0]) < 20)
+    throw new Error('TOML formatting requires Node.js 20 or later.');
+  if (parser === 'sh' && Number(prettier.version.split('.')[1]) < 6)
+    throw new Error('Shell formatting requires Prettier 3.6 or later.');
+}
+
+function packageVersion(entry) {
+  if (!entry) return undefined; // Parser objects in project configuration need not have a package.
+  let dir = path.dirname(entry);
+  while (true) {
+    try {
+      const metadata = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+      if (typeof metadata.version === 'string') return metadata.version;
+    } catch { /* Continue towards the package root. */ }
+    const parent = path.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
+async function checkEnvironment(request) {
+  const report = { ok: true, node: { version: process.versions.node, path: process.execPath, arch: process.arch },
+    prettier: { status: 'error', path: request.prettierPath }, plugins: [] };
+  let prettier, packageFile, config, configFile;
+  try {
+    ({ prettier, packageFile } = await loadPrettier(request));
+    report.prettier = { status: 'available', version: prettier.version, path: request.prettierPath };
+  } catch (error) { report.prettier.error = error.message; return report; }
+  const filePath = request.filePath;
+  try {
+    if (filePath) {
+      if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) throw new Error('filePath must be absolute.');
+      process.chdir(path.dirname(filePath));
+      config = await prettier.resolveConfig(filePath, { editorconfig: true });
+      configFile = await prettier.resolveConfigFile(filePath);
+    }
+  } catch (error) { report.configError = error.message; return report; }
+  report.configFile = configFile;
+  const samples = { java: 'class Probe {}', xml: '<probe/>', php: '<?php $probe=1;',
+    sql: 'select 1;', 'dot-properties': 'probe=1', toml: 'probe=1', sh: 'echo probe' };
+  for (const dependency of optionalPlugins) {
+    const item = { name: dependency.name, parser: dependency.parser, status: 'error' };
+    try {
+      checkRequirements(dependency.parser, prettier);
+      const plugins = configuredPlugins(config, configFile ?? filePath ?? packageFile, packageFile);
+      item.path = await addOptionalPlugin(dependency, plugins, [filePath, configFile, packageFile]);
+      item.version = packageVersion(item.path);
+      // Import alone does not exercise a lazily loaded native/WASM dependency.
+      await prettier.format(samples[dependency.parser], { parser: dependency.parser, plugins });
+      item.status = 'available';
+    } catch (error) {
+      item.status = error.code === dependency.code ? 'missing' : 'error';
+      item.error = error.message;
+    }
+    report.plugins.push(item);
+  }
+  return report;
+}
+
+async function run(request) {
+  if (request?.operation === 'detectNode') {
+    if (Number(process.versions.node.split('.')[0]) < 18) throw new Error('Node.js 18 or later is required.');
+    return { ok: true, nodePath: process.execPath, version: process.versions.node };
+  }
+  if (request?.operation === 'detectPrettier') return detectPrettier(request);
+  if (request?.operation === 'checkEnvironment') return checkEnvironment(request);
+  if (!request || typeof request.text !== 'string') throw new Error('text must be a string.');
+  if (!Number.isInteger(request.cursorOffset) || request.cursorOffset < 0 ||
+      request.cursorOffset > request.text.length) throw new Error('Invalid UTF-16 cursorOffset.');
+  const { prettier, packageFile } = await loadPrettier(request);
   const filePath = request.filePath;
   if (filePath !== undefined && (typeof filePath !== 'string' || !path.isAbsolute(filePath))) {
     throw new Error('filePath must be absolute.');
@@ -164,23 +242,29 @@ async function run(request) {
     });
     if (info.ignored) return { ok: true, ignored: true, version: prettier.version };
   }
-  const plugins = (config?.plugins ?? []).map((plugin) => {
-    if (typeof plugin !== 'string') return plugin;
-    const from = configFile ?? filePath ?? packageFile;
-    const dependency = optionalPlugins.find(item => item.name === plugin);
-    if (dependency) return resolveOptionalPlugin(dependency, [from, packageFile]);
-    return createRequire(from).resolve(plugin);
-  });
+  const plugins = configuredPlugins(config, configFile ?? filePath ?? packageFile, packageFile);
   if (!parser && !config?.parser && filePath) {
     const extension = path.extname(filePath).toLowerCase();
     parser = optionalPlugins.find(item => item.extensions.includes(extension))?.parser;
   }
   const java = (parser ?? config?.parser) === 'java';
   const sql = (parser ?? config?.parser) === 'sql';
+  const shell = (parser ?? config?.parser) === 'sh';
+  checkRequirements(parser ?? config?.parser, prettier);
   const dependency = optionalPlugins.find(item => item.parser === (parser ?? config?.parser));
   if (dependency) await addOptionalPlugin(dependency, plugins, [filePath, configFile, packageFile]);
+  if (shell) {
+    // The Shell AST includes objects without positions and uses UTF-8 byte offsets.
+    // Let Prettier map the cursor by its whole-document diff, as for TOML.
+    for (let i = 0; i < plugins.length; ++i) {
+      if (plugins[i]?.parsers?.sh) plugins[i] = { ...plugins[i], parsers: {
+        ...plugins[i].parsers, sh: { ...plugins[i].parsers.sh, locStart: () => -1, locEnd: () => -1 },
+      } };
+    }
+  }
   const options = {
     ...(sql && config?.formatter !== 'node-sql-parser' ? { language: request.sqlDialect ?? 'sql' } : {}),
+    ...(shell ? { variant: request.shellDialect ?? 1 } : {}),
     endOfLine: request.endOfLine ?? 'auto', ...config, plugins,
     filepath: filePath, cursorOffset: request.cursorOffset,
   };

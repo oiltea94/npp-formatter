@@ -13,6 +13,10 @@ const cases = [
     text: 'select a,b from users where id=1;', expected: 'select\n  a,\n  b\nfrom\n  users\nwhere\n  id = 1;\n' },
   { parser: 'dot-properties', extension: 'properties', name: 'prettier-plugin-properties', code: 'MISSING_PROPERTIES_PLUGIN',
     text: 'greeting=hello\nanswer:42', expected: 'greeting = hello\nanswer = 42\n' },
+  { parser: 'toml', extension: 'toml', name: 'prettier-plugin-toml', code: 'MISSING_TOML_PLUGIN',
+    text: 'answer=42', expected: 'answer = 42\n' },
+  { parser: 'sh', extension: 'sh', name: 'prettier-plugin-sh', code: 'MISSING_SH_PLUGIN',
+    text: 'if true;then echo "hello";fi', expected: 'if true; then echo "hello"; fi\n' },
 ];
 function project(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'npp-extra-'));
@@ -114,4 +118,91 @@ test('Properties preserves comments, duplicate keys, escapes, Unicode and projec
   fs.writeFileSync(path.join(dir, '.prettierrc.json'), '{"keySeparator":": ","escapeNonLatin1":true}');
   const configured = invoke({ text: 'greeting=中文', filePath });
   assert.equal(configured.formatted, 'greeting: \\u4e2d\\u6587\n');
+});
+
+test('TOML preserves data, comments and project options, and rejects malformed input', t => {
+  const dir = project(t);
+  const filePath = path.join(dir, 'pyproject.toml');
+  const text = '# comment\n[project]\nname="中文"\nvalues=[1,2,3]\n';
+  const result = invoke({ text, filePath, endOfLine: 'crlf' });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.formatted, '# comment\r\n[project]\nname = "中文"\nvalues = [1, 2, 3]\n'.replace(/(?<!\r)\n/g, '\r\n'));
+  fs.writeFileSync(path.join(dir, '.prettierrc.json'), '{"singleQuote":true}');
+  assert.match(invoke({ text, filePath }).formatted, /name = '中文'/);
+  const invalid = invoke({ text: 'answer=[', parser: 'toml' });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.canChooseParser, true, invalid.error);
+  assert.equal(invalid.formatted, undefined);
+});
+
+test('Shell respects dialect and project precedence, preserves quoted heredoc and never executes input', t => {
+  const dir = project(t);
+  const filePath = path.join(dir, 'script.bash');
+  const marker = path.join(dir, 'must-not-exist');
+  const source = `# comment\ncat <<'EOF'\n  $HOME 中文\nEOF\nprintf '%s' "quoted value"\ntouch '${marker.replace(/\\/g, '/')}'\n`;
+  const formatted = invoke({ text: source, filePath });
+  assert.equal(formatted.ok, true, formatted.error);
+  assert.match(formatted.formatted, /  \$HOME 中文\nEOF/);
+  assert.match(formatted.formatted, /# comment/);
+  assert.equal(fs.existsSync(marker), false);
+  const text = 'values=(one two)';
+  const invalid = invoke({ text, filePath, shellDialect: 2 });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.formatted, undefined);
+  assert.equal(invalid.canChooseParser, true, invalid.error);
+  fs.writeFileSync(path.join(dir, '.prettierrc.json'), '{"variant":1}');
+  assert.equal(invoke({ text, filePath, shellDialect: 2 }).formatted, 'values=(one two)\n');
+});
+
+test('every offered Shell dialect is accepted and invalid options stay distinct from syntax errors', async () => {
+  const { options } = await import('prettier-plugin-sh');
+  for (const shellDialect of [1, 2, 4, 8]) {
+    assert.ok(options.variant.choices.some(choice => choice.value === shellDialect));
+    const result = invoke({ parser: 'sh', shellDialect, text: 'echo hello' });
+    assert.equal(result.ok, true, result.error);
+  }
+  const invalid = invoke({ parser: 'sh', shellDialect: 999, text: 'echo hello' });
+  assert.equal(invalid.ok, false);
+  assert.notEqual(invalid.canChooseParser, true);
+});
+
+test('Shell cursor mapping handles nested AST objects, Unicode and CRLF', () => {
+  const text = '# 中文😀\r\nif true;then\r\necho "value"\r\nfi';
+  for (const token of ['中文', 'value', 'fi']) {
+    const result = invoke({ text, parser: 'sh', cursorOffset: text.indexOf(token), endOfLine: 'crlf' });
+    assert.equal(result.ok, true, result.error);
+    assert.equal(result.formatted.slice(result.cursorOffset, result.cursorOffset + token.length), token);
+    assert.equal(/(?<!\r)\n/.test(result.formatted), false);
+  }
+});
+
+test('older Prettier remains usable for built-ins and reports the Shell version requirement', t => {
+  const dir = project(t);
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"prettier","version":"3.5.0","main":"index.cjs"}');
+  fs.writeFileSync(path.join(dir, 'index.cjs'), `module.exports={...require(${JSON.stringify(prettierPath)}),version:'3.5.0'};`);
+  const shell = invoke({ prettierPath: dir, parser: 'sh', text: 'echo hello' });
+  assert.equal(shell.ok, false);
+  assert.match(shell.error, /Prettier 3\.6 or later/);
+  assert.notEqual(shell.canChooseParser, true);
+  const core = invoke({ prettierPath: dir, parser: 'json', text: '{"a":1}' });
+  assert.equal(core.formatted, '{ "a": 1 }\n');
+  const report = invoke({ operation: 'checkEnvironment', prettierPath: dir });
+  assert.equal(report.prettier.version, '3.5.0');
+  const item = report.plugins.find(item => item.parser === 'sh');
+  assert.equal(item.status, 'error');
+  assert.match(item.error, /Prettier 3\.6 or later/);
+});
+
+test('TOML reports its Node version requirement before loading native code', () => {
+  const child = spawnSync(process.execPath, ['-e',
+    `Object.defineProperty(process.versions,'node',{value:'18.20.8'});require(${JSON.stringify(bridge)});`], {
+    input: JSON.stringify({ prettierPath, cursorOffset: 0, text: 'answer=42', parser: 'toml' }),
+    encoding: 'utf8', timeout: 10000,
+  });
+  assert.ifError(child.error);
+  assert.equal(child.status, 1);
+  const result = JSON.parse(child.stdout);
+  assert.match(result.error, /Node.js 20 or later/);
+  assert.equal(result.formatted, undefined);
+  assert.notEqual(result.canChooseParser, true);
 });

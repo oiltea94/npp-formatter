@@ -9,7 +9,7 @@
   <a href="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml"><img src="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml/badge.svg?branch=main" alt="Windows build and release checks"></a>
   <img src="https://img.shields.io/badge/Windows-x86%20%7C%20x64%20%7C%20ARM64-0078D4" alt="Windows x86, x64 and ARM64">
   <img src="https://img.shields.io/badge/Prettier-3.x-F7B93E?logo=prettier&amp;logoColor=white" alt="Prettier 3.x">
-  <img src="https://img.shields.io/badge/status-0.1.0%20prototype-DA8B24" alt="Version 0.1.0 prototype">
+  <img src="https://img.shields.io/badge/status-0.2.0%20prototype-DA8B24" alt="Version 0.2.0 prototype">
 </p>
 
 <p align="center"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
@@ -28,9 +28,7 @@
 
 Inspired by [Formatter for Sublime Text](https://packages.sublimetext.com/packages/Formatter), NppFormatter is building toward a configurable home for formatting and text transformation tools in Notepad++. **Prettier is the first working integration.**
 
-> **Current scope:** version 0.1.0 formats whole documents with Prettier. Java is available through the optional `prettier-plugin-java` package. You install the external tools yourself; the plugin neither bundles nor installs Node.js, Prettier, or language packages. More adapters and text transformations are on the [roadmap](#roadmap).
-
-> **Unreleased additions on `main`:** XML, PHP, SQL, and Properties through optional packages, a SQL dialect setting, plus dedicated JSONC, MDX, and Handlebars picker entries. These additions require a development build; the published 0.1.0 ZIPs do not include them.
+> **Current scope:** version 0.2.0 formats whole documents with Prettier, offers 16 built-in language choices and 7 optional languages, and checks your formatting environment. You install the external tools yourself; the plugin neither bundles nor installs Node.js, Prettier, or language packages. More adapters and text transformations are on the [roadmap](#roadmap).
 
 ## Why NppFormatter?
 
@@ -84,11 +82,11 @@ Use a manual-install ZIP from [Releases](https://github.com/oiltea94/npp-formatt
 2. Under **Artifacts**, download and extract **release-assets**.
 3. Choose the ZIP matching **Notepad++'s architecture**, then extract that ZIP too.
 
-| Your Notepad++ | Manual-install ZIP for 0.1.0 |
+| Your Notepad++ | Manual-install ZIP for 0.2.0 |
 |---|---|
-| x86 / 32-bit | `NppFormatter-0.1.0-x86.zip` |
-| x64 / 64-bit | `NppFormatter-0.1.0-x64.zip` |
-| ARM64 | `NppFormatter-0.1.0-arm64.zip` |
+| x86 / 32-bit | `NppFormatter-0.2.0-x86.zip` |
+| x64 / 64-bit | `NppFormatter-0.2.0-x64.zip` |
+| ARM64 | `NppFormatter-0.2.0-arm64.zip` |
 
 32-bit Notepad++ on 64-bit Windows still needs **x86**. Node.js runs as a separate process and only needs to be compatible with Windows; its architecture need not match the plugin. CI tests the plugin with Notepad++ **8.9.6** on all three architectures.
 
@@ -132,7 +130,7 @@ Select the Prettier directory containing `package.json`, rather than its `bin` d
 
 ## Languages
 
-The development build's language picker offers **16 built-in choices plus Java, XML, PHP, SQL, and Properties**. Built-in formats need only Prettier; each additional language needs its optional package. Actual syntax support depends on your installed formatter versions.
+The language picker offers **16 built-in choices and 7 optional languages: Java, XML, PHP, SQL, Properties, TOML, and Shell / Bash**. Built-in formats need only Prettier; each additional language needs its optional package. Actual syntax support depends on your installed formatter versions.
 
 | Language / picker choice | Common saved-file extensions |
 |---|---|
@@ -157,10 +155,12 @@ The development build's language picker offers **16 built-in choices plus Java, 
 | **PHP — optional package** | `.php`, `.phtml` |
 | **SQL — optional package** | `.sql` |
 | **Properties — optional package** | `.properties` |
+| **TOML — optional package** | `.toml` |
+| **Shell / Bash — optional package** | `.sh`, `.bash` |
 
 **Additional saved-file formats:** Flow (`.js.flow`), MJML (`.mjml`), PostCSS (`.pcss`, `.postcss`), and JSON.stringify-style JSON (`.importmap`). Prettier infers these from the path; they have no dedicated picker entries. Project configuration can also select a built-in parser such as `lwc`. The extensions above are examples, not an exhaustive list.
 
-**Untitled documents:** automatic Notepad++ language mapping covers JavaScript, TypeScript, Java, XML, PHP, SQL, Properties, JSON, JSON5, HTML, CSS, and YAML. Use **Format with language...** for other picker choices. MDX and Handlebars are distinct formats; selecting Markdown or HTML is not equivalent. C/C++ and Python formatting remain planned.
+**Untitled documents:** automatic Notepad++ language mapping covers JavaScript, TypeScript, Java, XML, PHP, SQL, Properties, TOML, Shell, JSON, JSON5, HTML, CSS, and YAML. Use **Format with language...** for other picker choices. MDX and Handlebars are distinct formats; selecting Markdown or HTML is not equivalent. C/C++ and Python formatting remain planned.
 
 ### Optional Java support
 
@@ -174,7 +174,7 @@ For a project-local installation, use `npm install --save-dev --save-exact prett
 
 Saved Java files honor an explicitly configured Java parser plugin first. Otherwise, discovery checks the file's project and ancestors, the configuration location, and the selected Prettier installation. Untitled documents use the installation alongside the selected Prettier. Missing packages show an installation message and preserve the document; install and retry. A discovered package's load error is reported without silently switching to another copy.
 
-### Optional XML support (unreleased)
+### Optional XML support
 
 For a global Prettier installation:
 
@@ -201,7 +201,7 @@ The default `xmlWhitespaceSensitivity: "strict"` preserves meaningful whitespace
 
 JSONC, MDX, and Handlebars use Prettier's built-in parsers and need no additional package.
 
-### Optional PHP, SQL, and Properties support (unreleased)
+### Optional PHP, SQL, and Properties support
 
 Install only the packages you need alongside your global Prettier:
 
@@ -227,13 +227,43 @@ To use PostgreSQL for a project's SQL files, add this Prettier override:
 }
 ```
 
+### Optional TOML and Shell support
+
+Install the packages you need alongside your global Prettier:
+
+```powershell
+npm install --global prettier-plugin-toml@4.1.0
+npm install --global prettier-plugin-sh@0.20.2
+```
+
+For project-local packages, replace `--global` with `--save-dev --save-exact`. Package discovery follows the same rules as Java and XML. Nothing is downloaded or installed by NppFormatter.
+
+- **TOML:** requires Node.js **20+**. Formats `.toml`, including `pyproject.toml` and `Cargo.toml`. npm installs the platform binding required by the package; no separate formatter executable is configured.
+- **Shell / Bash:** requires Prettier **3.6+**. Formats `.sh` and `.bash`; other shell filenames can use **Format with language...**. Choose **Bash**, **POSIX sh**, **mksh**, or **Bats** in the **Shell dialect** setting. The default is Bash. Project `variant` values (`1`, `2`, `4`, `8`, respectively) override this setting. Scripts are formatted without being executed. This does not add PowerShell, Windows batch, Dockerfile, or ignore-file formatting.
+
+To enforce POSIX syntax for a project's shell scripts:
+
+```json
+{
+  "overrides": [
+    { "files": "*.sh", "options": { "variant": 2 } }
+  ]
+}
+```
+
+### Check your formatting environment
+
+Open **Settings → Check formatting environment** to inspect the currently entered paths before saving. The report shows Node.js and Prettier versions, the document used for project discovery, and each optional package's version, location, and status: **Available**, **Not installed**, or **Check failed**. Available packages have passed a small formatting sample, including loading native or WASM dependencies. This checks the installation; it does not validate every document or every project option.
+
+The check runs in the background, can be cancelled by closing Settings, and neither installs packages nor saves settings. Changing either path clears the previous report. For project dependencies, activate a saved document in that project and rerun the check. External diagnostics retain their original language.
+
 ## Usage
 
 | Command | What it does |
 |---|---|
 | **Format document** | Formats the entire current buffer, including unsaved changes |
 | **Format with language...** | Overrides the language for this operation, keeping the file type, remembered choice, project options, and ignore rules |
-| **Settings...** | Configures Node.js, Prettier, the SQL dialect, and the request timeout |
+| **Settings...** | Configures Node.js, Prettier, SQL/Shell dialects and timeout; checks installed formatting tools |
 | **About** | Shows the version, supported formats, runtime requirements, and clickable project homepage |
 
 **Saved files** use their path for parser inference and project configuration. **Untitled files** use a supported Notepad++ document language; plain text containing valid JSON is detected automatically. Otherwise, a picker appears and remembers your choice for that document during the current session.

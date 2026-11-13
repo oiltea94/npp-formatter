@@ -9,7 +9,7 @@
   <a href="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml"><img src="https://github.com/oiltea94/npp-formatter/actions/workflows/ci.yml/badge.svg?branch=main" alt="Windows 构建与发布检查"></a>
   <img src="https://img.shields.io/badge/Windows-x86%20%7C%20x64%20%7C%20ARM64-0078D4" alt="Windows x86、x64 和 ARM64">
   <img src="https://img.shields.io/badge/Prettier-3.x-F7B93E?logo=prettier&amp;logoColor=white" alt="Prettier 3.x">
-  <img src="https://img.shields.io/badge/status-0.1.0%20prototype-DA8B24" alt="0.1.0 原型版本">
+  <img src="https://img.shields.io/badge/status-0.2.0%20prototype-DA8B24" alt="0.2.0 原型版本">
 </p>
 
 <p align="center"><a href="README.md">English</a> · <strong>简体中文</strong></p>
@@ -28,9 +28,7 @@
 
 灵感来自 [Sublime Text 的 Formatter](https://packages.sublimetext.com/packages/Formatter)。NppFormatter 希望将多种格式化与文本转换工具接入 Notepad++，通过统一配置使用。**Prettier 是目前已实现的第一种接入。**
 
-> **当前范围：** 0.1.0 原型支持使用 Prettier 格式化全文，Java 通过可选的 `prettier-plugin-java` 扩展支持。外部工具由用户自行安装；插件不捆绑或安装 Node.js、Prettier 和语言扩展包。更多适配器与文本转换功能见[路线图](#roadmap)。
-
-> **`main` 分支尚未发布的新增功能：** 通过可选扩展支持 XML、PHP、SQL 和 Properties，新增 SQL 方言设置，以及 JSONC、MDX、Handlebars 独立语言选项。这些功能需使用开发构建，已发布的 0.1.0 安装包尚未包含。
+> **当前范围：** 0.2.0 支持使用 Prettier 格式化全文，提供 16 个内置语言选项、7 种可选语言和格式化环境检查。外部工具由用户自行安装；插件不捆绑或安装 Node.js、Prettier 和语言扩展包。更多适配器与文本转换功能见[路线图](#roadmap)。
 
 ## 为什么使用 NppFormatter？
 
@@ -86,11 +84,11 @@ npm install --global prettier@3
 2. 在 **Artifacts** 中下载并解压 **release-assets**。
 3. 选择与 **Notepad++ 架构**一致的 ZIP，再解压这份安装包。
 
-| 你的 Notepad++ | 0.1.0 手动安装包 |
+| 你的 Notepad++ | 0.2.0 手动安装包 |
 |---|---|
-| x86 / 32 位 | `NppFormatter-0.1.0-x86.zip` |
-| x64 / 64 位 | `NppFormatter-0.1.0-x64.zip` |
-| ARM64 | `NppFormatter-0.1.0-arm64.zip` |
+| x86 / 32 位 | `NppFormatter-0.2.0-x86.zip` |
+| x64 / 64 位 | `NppFormatter-0.2.0-x64.zip` |
+| ARM64 | `NppFormatter-0.2.0-arm64.zip` |
 
 64 位 Windows 上运行的 32 位 Notepad++ 仍需选择 **x86**。Node.js 作为独立进程运行，只需兼容当前 Windows，其架构无需与插件一致。CI 使用 Notepad++ **8.9.6** 测试全部三种架构。
 
@@ -136,7 +134,7 @@ node -p "require('path').dirname(require.resolve('prettier/package.json'))"
 
 ## 支持的语言
 
-开发构建的语言选择器提供 **16 个内置选项，以及 Java、XML、PHP、SQL 和 Properties**。内置格式只需 Prettier；其他语言各需对应的可选扩展包。具体语法支持取决于安装的格式化工具版本。
+语言选择器提供 **16 个内置选项，以及 Java、XML、PHP、SQL、Properties、TOML、Shell / Bash 这 7 种可选语言**。内置格式只需 Prettier；其他语言各需对应的可选扩展包。具体语法支持取决于安装的格式化工具版本。
 
 | 语言 / 选择器选项 | 常见已保存文件扩展名 |
 |---|---|
@@ -161,10 +159,12 @@ node -p "require('path').dirname(require.resolve('prettier/package.json'))"
 | **PHP — 可选扩展包** | `.php`、`.phtml` |
 | **SQL — 可选扩展包** | `.sql` |
 | **Properties — 可选扩展包** | `.properties` |
+| **TOML — 可选扩展包** | `.toml` |
+| **Shell / Bash — 可选扩展包** | `.sh`、`.bash` |
 
 **已保存文件还支持：** Flow（`.js.flow`）、MJML（`.mjml`）、PostCSS（`.pcss`、`.postcss`）和 JSON.stringify 风格的 JSON（`.importmap`）。这些格式由 Prettier 根据路径推断，选择器中暂未提供独立选项。项目配置也可显式指定 `lwc` 等内置解析器。上表仅列出常见扩展名。
 
-**未保存文档：** 自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、Java、XML、PHP、SQL、Properties、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可通过**按指定语言格式化...** 使用。MDX 和 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。C/C++ 和 Python 格式化仍在规划中。
+**未保存文档：** 自动跟随 Notepad++ 文档语言的映射包括 JavaScript、TypeScript、Java、XML、PHP、SQL、Properties、TOML、Shell、JSON、JSON5、HTML、CSS 和 YAML。其他选择器格式可通过**按指定语言格式化...** 使用。MDX 和 Handlebars 是独立格式，选择 Markdown 或 HTML 并不等价。C/C++ 和 Python 格式化仍在规划中。
 
 ### 可选的 Java 支持
 
@@ -178,7 +178,7 @@ npm install --global prettier-plugin-java@2.11.0
 
 已保存的 Java 文件优先使用项目配置显式指定的 Java 解析器插件；否则依次查找文件所属项目及上级目录、配置文件位置、所选 Prettier 的安装位置。未保存文档使用所选 Prettier 同一位置的安装。依赖缺失时显示安装提示并保留原文，安装后重试即可。已找到的包加载失败时，报告原始错误，不会悄悄换用其他副本。
 
-### 可选的 XML 支持（尚未发布）
+### 可选的 XML 支持
 
 如果 Prettier 是全局安装：
 
@@ -205,7 +205,7 @@ XML 沿用 Java 的扩展查找顺序和缺失提示，优先遵循项目显式�
 
 JSONC、MDX 和 Handlebars 使用 Prettier 内置解析器，无需额外安装扩展包。
 
-### 可选的 PHP、SQL 和 Properties 支持（尚未发布）
+### 可选的 PHP、SQL 和 Properties 支持
 
 如果 Prettier 是全局安装，按需安装对应扩展：
 
@@ -231,6 +231,36 @@ npm install --global prettier-plugin-properties@0.3.1
 }
 ```
 
+### 可选的 TOML 和 Shell 支持
+
+Prettier 为全局安装时，按需安装：
+
+```powershell
+npm install --global prettier-plugin-toml@4.1.0
+npm install --global prettier-plugin-sh@0.20.2
+```
+
+项目内安装时，将 `--global` 换成 `--save-dev --save-exact`。扩展查找规则与 Java、XML 一致，NppFormatter 不会下载或安装依赖。
+
+- **TOML：** 需要 Node.js **20+**。支持 `.toml`，包括 `pyproject.toml` 和 `Cargo.toml`。npm 会安装扩展所需的平台绑定，无需另外配置格式化工具的可执行文件。
+- **Shell / Bash：** 需要 Prettier **3.6+**。支持 `.sh`、`.bash`，其他 Shell 文件名可使用**按指定语言格式化...**。在 **Shell 方言**中选择 **Bash、POSIX sh、mksh 或 Bats**，默认为 Bash。项目配置的 `variant` 优先于该设置，四种方言对应的值依次为 `1`、`2`、`4`、`8`。格式化不会执行脚本。本次不包含 PowerShell、Windows 批处理、Dockerfile 或忽略文件的格式化。
+
+让项目中的 Shell 脚本按 POSIX 语法处理：
+
+```json
+{
+  "overrides": [
+    { "files": "*.sh", "options": { "variant": 2 } }
+  ]
+}
+```
+
+### 检查格式化环境
+
+打开**配置 → 检查格式化环境**，即可在保存前检查当前输入的路径。结果显示 Node.js 和 Prettier 版本、用于查找项目依赖的文档，以及每个可选扩展的版本、位置和状态：**可用、未安装、检查失败**。标为可用的扩展已通过小样本格式化检查，包括加载原生或 WASM 依赖。这是安装检查，不代表每份文档或每项项目配置都能通过。
+
+检查在后台运行，关闭配置窗口即可取消，不会安装依赖或保存配置。修改任一路径会清除旧结果。检查项目内依赖时，先切换到该项目中已保存的文档，再重新检查。外部工具的错误详情保留原始语言。
+
 <a id="usage"></a>
 
 ## 日常使用
@@ -239,7 +269,7 @@ npm install --global prettier-plugin-properties@0.3.1
 |---|---|
 | **格式化文档** | 格式化当前缓冲区全文，包含尚未保存的修改 |
 | **按指定语言格式化...** | 仅本次覆盖语言选择，保留文件类型、记住的选择、项目选项和忽略规则 |
-| **配置...** | 设置 Node.js、Prettier、SQL 方言和请求超时时间 |
+| **配置...** | 设置 Node.js、Prettier、SQL/Shell 方言和超时时间，并检查格式化工具安装状态 |
 | **关于** | 显示版本、支持的格式、运行要求，以及可点击的项目主页 |
 
 **已保存文件**通过路径推断解析器并查找项目配置。**未保存文件**优先使用 Notepad++ 中受支持的文档语言；纯文本中的有效 JSON 会被自动识别。其他情况弹出语言选择窗口，选择仅在当前会话中为该文档记住。

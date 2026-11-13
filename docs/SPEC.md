@@ -8,7 +8,7 @@ inspired by Formatter for Sublime Text. Multiple external tools, configuration-b
 extension, and language-specific workflows are the target; Prettier is the first
 adapter. External formatters and their runtimes are installed by the user.
 
-This document distinguishes the implemented 0.1.0 Prettier prototype from planned
+This document distinguishes the implemented 0.2.0 Prettier integration from planned
 capabilities. The target architecture below is a plan, not current functionality.
 
 ## Target architecture (planned)
@@ -79,13 +79,13 @@ Implemented slices:
    Prettier installation. Untitled documents use the latter location. Localize
    missing-dependency guidance, preserve load errors, and offer explicit language
    recovery for Java parse failures. Never bundle or install the optional package.
-7. XML support (unreleased): reuse optional package discovery for
+7. XML support: reuse optional package discovery for
    @prettier/plugin-xml. Recognize .xml, .svg, .xsd, .xsl, .xslt, .xaml, and .resx,
    the Notepad++ XML language, and the XML picker entry. Preserve the plugin's
    strict whitespace default; honor project overrides. Localize missing-package
    guidance and preserve the document on errors. Add dedicated JSONC, MDX, and
    Handlebars entries backed by Prettier's built-in jsonc, mdx, and glimmer parsers.
-8. PHP, SQL, and Properties support (unreleased): discover @prettier/plugin-php,
+8. PHP, SQL, and Properties support: discover @prettier/plugin-php,
    prettier-plugin-sql, and prettier-plugin-properties using the same rules.
    Map the matching host languages and expose explicit picker choices. Persist
    SqlDialect with standard SQL as the default; invalid stored values fall back
@@ -93,6 +93,18 @@ Implemented slices:
    configuration. Projects using node-sql-parser retain their database setting.
    Save commits the selection; Cancel discards it. Live UI translation preserves
    the current selection. Missing packages and syntax failures retain the text.
+9. TOML and Shell support: discover prettier-plugin-toml and prettier-plugin-sh,
+   map L_TOML/L_BASH, and expose picker entries. Require Node.js 20+ for TOML and
+   Prettier 3.6+ for Shell. Persist ShellDialect with Bash as the default and
+   POSIX sh, mksh, and Bats alternatives; project variant overrides it. Use
+   Prettier's whole-document cursor mapping for Shell because its upstream AST
+   contains non-node objects and byte positions. Never execute document scripts.
+10. Environment check: inspect unsaved Settings paths on the cancellable detection
+    worker. Report Node/Prettier versions and each optional package's availability,
+    version, resolved path, and sample formatting errors. Use current saved-document
+    project discovery and explicit plugins, retaining broken-copy errors. Show
+    Node details even when Prettier fails. Clear results on path changes, preserve
+    results through live translation, and never install packages or save settings.
 
 The supported build targets are Notepad++ x86, x64, and ARM64 with UTF-8 Scintilla buffers. Existing non-UTF-8
 buffers receive a clear message asking the user to convert the encoding first.
@@ -142,6 +154,10 @@ publishing externally or replacing an existing user installation.
 - Exercise PHP, SQL, and Properties discovery, picker choices, saved files,
   localized missing dependencies, installation retry, and single undo. Verify
   SQL dialect persistence, Cancel, live translation, and project precedence.
+- Exercise TOML and Shell extension/host/picker discovery, missing packages,
+  real native/WASM loading, comments, heredocs, Unicode/CRLF cursor mapping,
+  Shell dialect persistence and project precedence, and read-only environment
+  diagnostics with unsaved paths, cancellation, missing/broken packages and locale changes.
 - Error/timeout/invalid response/stale result leaves original text untouched.
 - One undo restores the previous text; a no-op leaves the undo stack untouched.
 - Editor remains responsive while a child process is running.

@@ -23,12 +23,15 @@ int wmain(int argc, wchar_t** argv) {
         for (auto [language, parser] : {std::pair{L_JAVASCRIPT, "babel"}, {L_JS_EMBEDDED, "babel"},
              {L_TYPESCRIPT, "typescript"}, {L_JAVA, "java"}, {L_JSON, "json"}, {L_JSON5, "json5"},
              {L_HTML, "html"}, {L_XML, "xml"}, {L_CSS, "css"}, {L_YAML, "yaml"},
-             {L_PHP, "php"}, {L_SQL, "sql"}, {L_PROPS, "dot-properties"}})
+             {L_PHP, "php"}, {L_SQL, "sql"}, {L_PROPS, "dot-properties"}, {L_TOML, "toml"}, {L_BASH, "sh"}})
             check(std::string(formatter::parserForLanguage(language)) == parser, "Host parser mapping failed");
         for (int language : {L_TEXT, L_PYTHON, L_USER, L_EXTERNAL})
             check(formatter::parserForLanguage(language) == nullptr, "Unsupported language was guessed");
         std::cout << "PASS document-language parser mapping and unsupported-language fallback\n";
         check(formatter::sqlDialectIndex(L"missing") == 0, "Invalid SQL dialect must fall back to SQL");
+        check(formatter::shellDialectIndex(999) == 0, "Invalid Shell dialect must fall back to Bash");
+        for (size_t i = 0; i < std::size(formatter::shellDialects); ++i)
+            check(formatter::shellDialectIndex(formatter::shellDialects[i].value) == i, "Shell dialect round trip failed");
         for (size_t i = 0; i < std::size(formatter::sqlDialects); ++i)
             check(formatter::sqlDialectIndex(formatter::sqlDialects[i].value) == i, "SQL dialect setting round trip failed");
         if (argc != 3) throw std::runtime_error("Usage: process_test.exe node.exe fixture.cjs");
